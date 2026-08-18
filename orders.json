@@ -1,0 +1,266 @@
+[
+  {
+    "restaurantId": "donerci",
+    "restaurantName": "Kampüs Dönercisi",
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 140,
+    "customer": "mehmet",
+    "type": "Kampüs Kapısı",
+    "payment": "Kapıda Nakit/POS",
+    "id": 3375,
+    "status": "BEKLIYOR",
+    "date": "18.08.2026",
+    "time": "17:07"
+  },
+  {
+    "restaurantId": "donerci",
+    "restaurantName": "Kampüs Dönercisi",
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 140,
+    "customer": "mehmet",
+    "type": "Kampüs Kapısı",
+    "payment": "Kapıda Nakit/POS",
+    "id": 2259,
+    "status": "TAMAMLANDI",
+    "date": "18.08.2026",
+    "time": "17:07"
+  },
+  {
+    "restaurantId": "donerci",
+    "restaurantName": "Kampüs Dönercisi",
+    "items": [
+      {
+        "id": 2,
+        "name": "Et Döner Dürüm",
+        "price": 190
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 210,
+    "customer": "ahmet",
+    "type": "Kampüs Kapısı",
+    "payment": "Kapıda Nakit/POS",
+    "id": 8124,
+    "status": "TAMAMLANDI",
+    "date": "18.08.2026",
+    "time": "17:07"
+  },
+  {
+    "restaurantId": "donerci",
+    "restaurantName": "Kampüs Dönercisi",
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 140,
+    "customer": "Oğuz Kaan",
+    "type": "Kampüs Kapısı",
+    "payment": "Kapıda Nakit/POS",
+    "id": 8686,
+    "status": "TAMAMLANDI",
+    "date": "18.08.2026",
+    "time": "17:06"
+  },
+  {
+    "restaurantId": "pilavci",
+    "restaurantName": "Meşhur Pilavcı Ali Usta",
+    "items": [
+      {
+        "id": 201,
+        "name": "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
+        "price": 110
+      },
+      {
+        "id": 203,
+        "name": "Büyük Boy Yayık Ayran",
+        "price": 25
+      }
+    ],
+    "total": 135,
+    "customer": "cccc",
+    "type": "Kampüs Kapısı",
+    "payment": "Kapıda Nakit/POS",
+    "id": 8768,
+    "status": "TAMAMLANDI",
+    "time": "16:03"
+  },
+  {
+    "restaurantId": "pilavci",
+    "restaurantName": "Meşhur Pilavcı Ali Usta",
+    "items": [
+      {
+        "id": 201,
+        "name": "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
+        "price": 110
+      },
+      {
+        "id": 203,
+        "name": "Büyük Boy Yayık Ayran",
+        "price": 25
+      },
+      {
+        "id": 201,
+        "name": "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
+        "price": 110
+      },
+      {
+        "id": 203,
+        "name": "Büyük Boy Yayık Ayran",
+        "price": 25
+      }
+    ],
+    "total": 270,
+    "customer": "bbbb",
+    "type": "Kampüs Kapısı",
+    "payment": "FAST / Havale",
+    "id": 9692,
+    "status": "TAMAMLANDI",
+    "time": "16:03"
+  },
+  {
+    "restaurantId": "donerci",
+    "restaurantName": "Kampüs Dönercisi",
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 140,
+    "customer": "aaaa",
+    "type": "Gel-Al",
+    "payment": "FAST / Havale",
+    "id": 6285,
+    "status": "TAMAMLANDI",
+    "time": "16:03"
+  },
+  {
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 2,
+        "name": "Et Döner Dürüm",
+        "price": 190
+      },
+      {
+        "id": 4,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 330,
+    "customer": "Yunus Emre oda 215",
+    "type": "Kampüs Kapısı",
+    "payment": "FAST / Havale",
+    "id": 3091,
+    "status": "BEKLIYOR",
+    "time": "12:49"
+  },
+  {
+    "items": [
+      {
+        "id": 3,
+        "name": "Kaşarlı Tost",
+        "price": 70
+      },
+      {
+        "id": 4,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 90,
+    "customer": "Oğuz Kaan",
+    "type": "Kampüs Kapısı",
+    "payment": "FAST / Havale",
+    "id": 9758,
+    "status": "HAZIRLANIYOR",
+    "time": "23:18"
+  },
+  {
+    "items": [
+      {
+        "id": 2,
+        "name": "Et Döner Dürüm",
+        "price": 190
+      },
+      {
+        "id": 4,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 210,
+    "customer": "Oğuz Kaan",
+    "type": "Kampüs Kapısı",
+    "payment": "FAST / Havale",
+    "id": 3597,
+    "status": "HAZIR",
+    "time": "23:17"
+  },
+  {
+    "items": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120
+      },
+      {
+        "id": 4,
+        "name": "Ayran (300ml)",
+        "price": 20
+      }
+    ],
+    "total": 140,
+    "customer": "Oğuz Kaan",
+    "type": "Gel-Al",
+    "payment": "FAST / Havale",
+    "id": 4692,
+    "status": "TAMAMLANDI",
+    "time": "23:17"
+  }
+]

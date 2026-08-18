@@ -1,0 +1,95 @@
+{
+  "donerci": {
+    "id": "donerci",
+    "name": "Kampüs Dönercisi",
+    "icon": "🌯",
+    "desc": "Hatay usulü özel soslu tavuk ve et dürüm",
+    "iban": "TR33 0006 1005 1987 6543 2100 01",
+    "accountName": "Ahmet Usta - Döner",
+    "menu": [
+      {
+        "id": 1,
+        "name": "Tavuk Döner Dürüm",
+        "price": 120,
+        "desc": "Soslu, patatesli, turşulu",
+        "inStock": true
+      },
+      {
+        "id": 2,
+        "name": "Et Döner Dürüm",
+        "price": 190,
+        "desc": "Özel tereyağlı lavaş",
+        "inStock": true
+      },
+      {
+        "id": 3,
+        "name": "Ayran (300ml)",
+        "price": 20,
+        "desc": "Yayık açık ayran",
+        "inStock": true
+      }
+    ]
+  },
+  "tostcu": {
+    "id": "tostcu",
+    "name": "Öğrenci Tostçusu",
+    "icon": "🥪",
+    "desc": "Bol malzemeli çıtır bazlama ve sanayi tostları",
+    "iban": "TR55 0001 2009 8765 4321 0000 02",
+    "accountName": "Mehmet Abi - Tost",
+    "menu": [
+      {
+        "id": 101,
+        "name": "Karışık Bazlama Tost",
+        "price": 95,
+        "desc": "Sucuk, kaşar, salça, tereyağı",
+        "inStock": true
+      },
+      {
+        "id": 102,
+        "name": "Çift Kaşarlı Tost",
+        "price": 75,
+        "desc": "Bolu tereyağlı bol kaşar",
+        "inStock": true
+      },
+      {
+        "id": 103,
+        "name": "Kutu Kola / Fanta",
+        "price": 35,
+        "desc": "330ml soğuk kutu",
+        "inStock": true
+      }
+    ]
+  },
+  "pilavci": {
+    "id": "pilavci",
+    "name": "Meşhur Pilavcı Ali Usta",
+    "icon": "🍚",
+    "desc": "Tereyağlı nohutlu tavuklu sokak pilavı",
+    "iban": "TR66 0003 4001 2345 6789 0000 03",
+    "accountName": "Ali Usta - Pilav",
+    "menu": [
+      {
+        "id": 201,
+        "name": "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
+        "price": 110,
+        "desc": "Bol didik tavuk ve tereyağlı pilav",
+        "inStock": true
+      },
+      {
+        "id": 202,
+        "name": "Ciğerli Nohutlu Pilav",
+        "price": 140,
+        "desc": "Arnavut ciğeri parçalı",
+        "inStock": true
+      },
+      {
+        "id": 203,
+        "name": "Büyük Boy Yayık Ayran",
+        "price": 25,
+        "desc": "Köpüklü açık ayran",
+        "inStock": true
+      }
+    ]
+  }
+}

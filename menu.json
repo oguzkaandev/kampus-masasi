@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "name": "Tavuk Döner Dürüm",
+    "price": 120,
+    "desc": "Soslu, patatesli, turşulu",
+    "inStock": true
+  },
+  {
+    "id": 2,
+    "name": "Et Döner Dürüm",
+    "price": 190,
+    "desc": "Özel tereyağlı lavaş",
+    "inStock": true
+  },
+  {
+    "id": 3,
+    "name": "Kaşarlı Tost",
+    "price": 70,
+    "desc": "Bolu tereyağlı çift kaşar",
+    "inStock": true
+  },
+  {
+    "id": 4,
+    "name": "Ayran (300ml)",
+    "price": 20,
+    "desc": "Yayık açık ayran",
+    "inStock": true
+  }
+]
