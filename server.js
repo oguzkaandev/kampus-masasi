@@ -538,6 +538,8 @@ function getStudentHubHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kampüs Masası</title>
+  <!-- Pure JS QR Code Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #f1f5f9; color: #0f172a; padding-bottom: 110px; }
@@ -573,7 +575,12 @@ function getStudentHubHTML() {
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
     .modal-content { background: white; border-radius: 16px; max-width: 450px; width: 100%; padding: 1.5rem; max-height: 90vh; overflow-y: auto; }
     input, select, textarea { width: 100%; padding: 10px; margin: 6px 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
-    .iban-box { background: #fef3c7; border: 1px dashed #d97706; padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+
+    /* TR-Karekod Box */
+    .qr-container { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; margin-bottom: 12px; }
+    .qr-header { display: flex; align-items: center; justify-content: center; gap: 8px; color: #0284c7; font-weight: bold; font-size: 0.9rem; margin-bottom: 8px; }
+    #qrCodeBox { display: flex; justify-content: center; margin: 10px auto; background: white; padding: 10px; border-radius: 10px; border: 1px solid #cbd5e1; width: 180px; height: 180px; }
+    .copy-btn { background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; margin-top: 6px; }
 
     /* Customizer Option Groups */
     .opt-group { margin-bottom: 14px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
@@ -649,26 +656,44 @@ function getStudentHubHTML() {
     </div>
   </div>
 
-  <!-- Modal 2: Final Checkout -->
+  <!-- Modal 2: Final Checkout & TR-Karekod -->
   <div class="modal-overlay" id="checkoutModal">
     <div class="modal-content">
-      <h3 id="modalRestTitle">Siparişi Onayla</h3>
-      <div class="iban-box" id="modalIbanBox"></div>
+      <h3 id="modalRestTitle" style="color:#0f172a; margin-bottom:10px;">Siparişi Onayla</h3>
+      
+      <div style="margin-bottom:12px; max-height:110px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;" id="checkoutSummaryList"></div>
 
-      <div style="margin-bottom:12px; max-height:120px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;" id="checkoutSummaryList"></div>
+      <label style="font-size:0.85rem; font-weight:bold;">Ödeme Şekli:</label>
+      <select id="paymentType" onchange="togglePaymentUI()">
+        <option value="FAST / Havale">⚡ FAST / TR-Karekod İle Öde</option>
+        <option value="Kapıda Nakit/POS">💵 Teslimde Nakit / Kart</option>
+      </select>
 
-      <label>İsim / Oda / Tel:</label>
+      <!-- Dynamic TR-Karekod Container -->
+      <div class="qr-container" id="qrContainer">
+        <div class="qr-header">
+          <span>⚡ TR-Karekod (FAST Ödeme)</span>
+        </div>
+        <p style="font-size:0.75rem; color:#64748b;">Banka uygulamanızdan (Ziraat, Garanti, İşbank vb.) <strong>"Karekod ile Öde"</strong> seçip okutun:</p>
+        
+        <div id="qrCodeBox"></div>
+        
+        <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+          <button class="copy-btn" id="btnCopyIban" onclick="copyIban()">📋 IBAN'ı Kopyala</button>
+          <button class="copy-btn" id="btnCopyAmount" onclick="copyAmount()">💰 Tutarı Kopyala</button>
+        </div>
+        <p style="font-size:0.72rem; color:#94a3b8; margin-top:6px;">Alıcı: <span id="qrAccountName" style="font-weight:bold; color:#334155;"></span></p>
+      </div>
+
+      <label style="font-size:0.85rem; font-weight:bold;">İsim / Oda / Tel:</label>
       <input type="text" id="custName" placeholder="Örn: Ali - KYK 3. Blok No:402">
-      <label>Teslimat Türü:</label>
+      
+      <label style="font-size:0.85rem; font-weight:bold;">Teslimat Türü:</label>
       <select id="orderType">
         <option value="Gel-Al">Gel-Al (Dükkandan Teslim)</option>
         <option value="Kampüs Kapısı">Kampüs / Yurt Kapısı</option>
       </select>
-      <label>Ödeme Şekli:</label>
-      <select id="paymentType">
-        <option value="FAST / Havale">FAST / Havale İle Gönderdim</option>
-        <option value="Kapıda Nakit/POS">Teslimde Nakit / Kart</option>
-      </select>
+
       <button class="cart-btn" style="background:#2563eb; width:100%; justify-content:center;" onclick="submitOrder()">Siparişi Dükkana Gönder</button>
       <button style="width:100%; border:none; background:none; color:#64748b; margin-top:10px; cursor:pointer;" onclick="closeCheckout()">İptal</button>
     </div>
@@ -685,6 +710,60 @@ function getStudentHubHTML() {
     function esc(str) {
       if (!str) return '';
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* --- TR-KAREKOD EMVCo GENERATOR --- */
+    function formatTLV(tag, val) {
+      const len = String(val.length).padStart(2, '0');
+      return tag + len + val;
+    }
+
+    function calculateCRC16(str) {
+      let crc = 0xFFFF;
+      for (let c = 0; c < str.length; c++) {
+        crc ^= str.charCodeAt(c) << 8;
+        for (let i = 0; i < 8; i++) {
+          if ((crc & 0x8000) !== 0) {
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+          } else {
+            crc = (crc << 1) & 0xFFFF;
+          }
+        }
+      }
+      return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function generateTRKarekodPayload(iban, merchantName, amount, orderRef) {
+      const cleanIban = String(iban || '').replace(/\\s+/g, '').toUpperCase();
+      const cleanName = String(merchantName || 'ISYERI').slice(0, 25);
+      const amountStr = Number(amount).toFixed(2);
+      const ref = String(orderRef || 'KAMPUS').slice(0, 20);
+
+      // Tag 30: FAST Account Information (TCMB Standard)
+      const sub30_00 = formatTLV("00", "TR.GOV.TCMB.FAST");
+      const sub30_01 = formatTLV("01", cleanIban);
+      const tag30 = formatTLV("30", sub30_00 + sub30_01);
+
+      // Tag 62: Additional Data (Order Reference)
+      const sub62_05 = formatTLV("05", ref);
+      const tag62 = formatTLV("62", sub62_05);
+
+      let payload = "";
+      payload += formatTLV("00", "01");              // Payload Format Indicator
+      payload += formatTLV("01", "12");              // Dynamic QR
+      payload += tag30;                              // FAST IBAN
+      payload += formatTLV("52", "5812");            // Merchant Category: Restaurant
+      payload += formatTLV("53", "949");             // Currency: TRY (949)
+      payload += formatTLV("54", amountStr);         // Amount
+      payload += formatTLV("58", "TR");              // Country Code
+      payload += formatTLV("59", cleanName);         // Merchant Name
+      payload += formatTLV("60", "KAMPUS");          // City
+      payload += tag62;                              // Reference Info
+
+      // Tag 63: CRC16
+      payload += "6304";
+      const crc = calculateCRC16(payload);
+      return payload + crc;
     }
 
     async function init() {
@@ -867,11 +946,11 @@ function getStudentHubHTML() {
 
     function openCheckout() {
       document.getElementById('modalRestTitle').innerText = activeRestaurant.name;
-      document.getElementById('modalIbanBox').innerHTML =
-        '<strong>Doğrudan FAST / Havale IBAN:</strong><br>' +
-        '<code>' + activeRestaurant.iban + '</code><br>' +
-        '<small>' + esc(activeRestaurant.accountName) + '</small>';
+      document.getElementById('qrAccountName').innerText = activeRestaurant.accountName || activeRestaurant.name;
 
+      const totalAmount = cart.reduce((s, i) => s + i.price, 0);
+
+      // Render checkout item breakdown
       document.getElementById('checkoutSummaryList').innerHTML = cart.map(i => {
         const modText = i.selectedOptions.map(o => o.name + (o.price > 0 ? ' (+' + o.price + '₺)' : '')).join(', ');
         const noteText = i.itemNote ? ' | Not: ' + esc(i.itemNote) : '';
@@ -881,7 +960,50 @@ function getStudentHubHTML() {
         '</div>';
       }).join('');
 
+      renderTRKarekod(totalAmount);
+      togglePaymentUI();
       document.getElementById('checkoutModal').style.display = 'flex';
+    }
+
+    function renderTRKarekod(amount) {
+      const payload = generateTRKarekodPayload(
+        activeRestaurant.iban,
+        activeRestaurant.accountName || activeRestaurant.name,
+        amount,
+        'SIP-' + Math.floor(1000 + Math.random() * 9000)
+      );
+
+      const qrBox = document.getElementById('qrCodeBox');
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, {
+        text: payload,
+        width: 160,
+        height: 160,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    function togglePaymentUI() {
+      const payType = document.getElementById('paymentType').value;
+      document.getElementById('qrContainer').style.display = payType.includes('FAST') ? 'block' : 'none';
+    }
+
+    function copyIban() {
+      if (!activeRestaurant) return;
+      navigator.clipboard.writeText(activeRestaurant.iban.replace(/\\s+/g, ''));
+      const btn = document.getElementById('btnCopyIban');
+      btn.innerText = 'Kopyalandı! ✅';
+      setTimeout(() => btn.innerText = '📋 IBAN\\'ı Kopyala', 2000);
+    }
+
+    function copyAmount() {
+      const total = cart.reduce((s, i) => s + i.price, 0);
+      navigator.clipboard.writeText(total);
+      const btn = document.getElementById('btnCopyAmount');
+      btn.innerText = total + ' ₺ Kopyalandı! ✅';
+      setTimeout(() => btn.innerText = '💰 Tutarı Kopyala', 2000);
     }
 
     function closeCheckout() { document.getElementById('checkoutModal').style.display = 'none'; }
