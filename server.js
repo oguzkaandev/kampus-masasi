@@ -13,13 +13,67 @@ const DEFAULT_HUB = {
     name: "Kampüs Dönercisi",
     icon: "🌯",
     pin: "1234",
-    status: "OPEN", // OPEN, BUSY, CLOSED
+    status: "OPEN",
     desc: "Hatay usulü özel soslu tavuk ve et dürüm",
     iban: "TR33 0006 1005 1987 6543 2100 01",
     accountName: "Ahmet Usta - Döner",
     menu: [
-      { id: 1, name: "Tavuk Döner Dürüm", price: 120, desc: "Soslu, patatesli, turşulu", inStock: true },
-      { id: 2, name: "Et Döner Dürüm", price: 190, desc: "Özel tereyağlı lavaş", inStock: true },
+      {
+        id: 1,
+        name: "Tavuk Döner Dürüm",
+        price: 120,
+        desc: "Soslu, patatesli, turşulu",
+        inStock: true,
+        options: [
+          {
+            name: "Porsiyon Seçimi",
+            type: "radio",
+            required: true,
+            choices: [
+              { name: "Standart Dürüm", price: 0 },
+              { name: "1.5 Porsiyon (+50g Tavuk)", price: 35 }
+            ]
+          },
+          {
+            name: "Malzeme & Sos Tercihi",
+            type: "checkbox",
+            choices: [
+              { name: "Soğansız", price: 0 },
+              { name: "Bol Soslu", price: 0 },
+              { name: "Turşusuz", price: 0 },
+              { name: "Ekstra Kaşar", price: 25 },
+              { name: "Ekstra Patates", price: 15 }
+            ]
+          }
+        ]
+      },
+      {
+        id: 2,
+        name: "Et Döner Dürüm",
+        price: 190,
+        desc: "Özel tereyağlı lavaş",
+        inStock: true,
+        options: [
+          {
+            name: "Porsiyon Seçimi",
+            type: "radio",
+            required: true,
+            choices: [
+              { name: "Standart Dürüm", price: 0 },
+              { name: "1.5 Porsiyon (+50g Et)", price: 60 }
+            ]
+          },
+          {
+            name: "Malzeme Tercihi",
+            type: "checkbox",
+            choices: [
+              { name: "Soğansız", price: 0 },
+              { name: "Ekstra Tereyağlı Lavaş", price: 20 },
+              { name: "Ekstra Kaşar", price: 25 }
+            ]
+          }
+        ]
+      },
       { id: 3, name: "Ayran (300ml)", price: 20, desc: "Yayık açık ayran", inStock: true }
     ]
   },
@@ -33,7 +87,25 @@ const DEFAULT_HUB = {
     iban: "TR55 0001 2009 8765 4321 0000 02",
     accountName: "Mehmet Abi - Tost",
     menu: [
-      { id: 101, name: "Karışık Bazlama Tost", price: 95, desc: "Sucuk, kaşar, salça, tereyağı", inStock: true },
+      {
+        id: 101,
+        name: "Karışık Bazlama Tost",
+        price: 95,
+        desc: "Sucuk, kaşar, salça, tereyağı",
+        inStock: true,
+        options: [
+          {
+            name: "Sos & Malzeme",
+            type: "checkbox",
+            choices: [
+              { name: "Salçasız", price: 0 },
+              { name: "Acı Soslu", price: 0 },
+              { name: "Ekstra Kaşar", price: 20 },
+              { name: "Ekstra Sucuk", price: 25 }
+            ]
+          }
+        ]
+      },
       { id: 102, name: "Çift Kaşarlı Tost", price: 75, desc: "Bolu tereyağlı bol kaşar", inStock: true },
       { id: 103, name: "Kutu Kola / Fanta", price: 35, desc: "330ml soğuk kutu", inStock: true }
     ]
@@ -48,7 +120,33 @@ const DEFAULT_HUB = {
     iban: "TR66 0003 4001 2345 6789 0000 03",
     accountName: "Ali Usta - Pilav",
     menu: [
-      { id: 201, name: "Tavuklu Nohutlu Pilav (1.5 Porsiyon)", price: 110, desc: "Bol didik tavuk ve tereyağlı pilav", inStock: true },
+      {
+        id: 201,
+        name: "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
+        price: 110,
+        desc: "Bol didik tavuk ve tereyağlı pilav",
+        inStock: true,
+        options: [
+          {
+            name: "Porsiyon Seçimi",
+            type: "radio",
+            required: true,
+            choices: [
+              { name: "Standart Porsiyon", price: 0 },
+              { name: "Duble Tavuk (+50g)", price: 35 }
+            ]
+          },
+          {
+            name: "Tercihler",
+            type: "checkbox",
+            choices: [
+              { name: "Karabibersiz", price: 0 },
+              { name: "Ekstra Nohut", price: 10 },
+              { name: "Ketçap & Mayonez İstiyorum", price: 0 }
+            ]
+          }
+        ]
+      },
       { id: 202, name: "Ciğerli Nohutlu Pilav", price: 140, desc: "Arnavut ciğeri parçalı", inStock: true },
       { id: 203, name: "Büyük Boy Yayık Ayran", price: 25, desc: "Köpüklü açık ayran", inStock: true }
     ]
@@ -82,10 +180,9 @@ let hub = loadHub();
 let orders = loadOrders();
 let clients = [];
 
-// --- Add this helper around Line 86 ---
 function parseJsonBody(req, res, callback) {
   let body = '';
-  const MAX_SIZE = 1024 * 1024; // 1 MB limit
+  const MAX_SIZE = 1024 * 1024;
   req.on('data', chunk => {
     body += chunk;
     if (body.length > MAX_SIZE) {
@@ -123,7 +220,6 @@ const server = http.createServer((req, res) => {
 
   // 2. API: Public Hub Info
   if (pathname === '/api/hub' && req.method === 'GET') {
-    // Strip PINs from public payload
     const publicHub = {};
     for (let key in hub) {
       const { pin, ...safeData } = hub[key];
@@ -135,14 +231,12 @@ const server = http.createServer((req, res) => {
   }
 
   // 3. API: Kitchen Auth / Verify PIN
-  // 3. API: Kitchen Auth / Verify PIN
   if (pathname === '/api/kitchen/auth' && req.method === 'POST') {
     parseJsonBody(req, res, (data) => {
       const restaurantId = data.restaurantId || 'donerci';
       const pin = String(data.pin || '').trim();
       const rest = hub[restaurantId];
 
-      // Logs to Render console so you can see what is happening
       console.log(`[AUTH] Restaurant: ${restaurantId} | Sent: "${pin}" | Expected: "${rest ? rest.pin : 'NOT FOUND'}"`);
 
       if (rest && String(rest.pin).trim() === pin) {
@@ -155,19 +249,20 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  // 4. API: Change Restaurant Operating Status (Open/Busy/Closed)
+
+  // 4. API: Change Restaurant Operating Status
   if (pathname === '/api/kitchen/store-status' && req.method === 'POST') {
-  parseJsonBody(req, res, ({ restaurantId, status }) => {
-    if (hub[restaurantId]) {
-      hub[restaurantId].status = status;
-      saveHub(hub);
-      broadcast({ event: 'HUB_UPDATE', data: hub });
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, status }));
-  });
-  return;
-}
+    parseJsonBody(req, res, ({ restaurantId, status }) => {
+      if (hub[restaurantId]) {
+        hub[restaurantId].status = status;
+        saveHub(hub);
+        broadcast({ event: 'HUB_UPDATE', data: hub });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, status }));
+    });
+    return;
+  }
 
   // 5. API: Active Orders
   if (pathname === '/api/orders/active' && req.method === 'GET') {
@@ -192,13 +287,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 7. API: Download End-of-Day Z-Raporu (.CSV)
+  // 7. API: Download Z-Raporu (.CSV)
   if (pathname === '/api/kitchen/z-raporu' && req.method === 'GET') {
     const restId = parsedUrl.query.restaurantId;
     const rest = hub[restId] || { name: "Restoran" };
     const restOrders = orders.filter(o => o.restaurantId === restId);
 
-    let csv = '\uFEFF'; // UTF-8 BOM for Excel Turkish character compatibility
+    let csv = '\uFEFF';
     csv += 'Sipariş No;Tarih;Saat;Müşteri;Teslimat;Ödeme;Ürünler;Tutar (TL)\n';
     
     restOrders.forEach(o => {
@@ -221,23 +316,23 @@ const server = http.createServer((req, res) => {
 
   // 8. API: Toggle Item Stock
   if (pathname === '/api/menu/toggle-stock' && req.method === 'POST') {
-  parseJsonBody(req, res, ({ restaurantId, itemId }) => {
-    const rest = hub[restaurantId];
-    if (rest) {
-      const item = rest.menu.find(i => i.id === itemId);
-      if (item) {
-        item.inStock = !item.inStock;
-        saveHub(hub);
-        broadcast({ event: 'HUB_UPDATE', data: hub });
+    parseJsonBody(req, res, ({ restaurantId, itemId }) => {
+      const rest = hub[restaurantId];
+      if (rest) {
+        const item = rest.menu.find(i => i.id === itemId);
+        if (item) {
+          item.inStock = !item.inStock;
+          saveHub(hub);
+          broadcast({ event: 'HUB_UPDATE', data: hub });
+        }
       }
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, hub }));
-  });
-  return;
-}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, hub }));
+    });
+    return;
+  }
 
-  // 9. API: Place Order (With Server-Side Modifier & Price Validation)
+  // 9. API: Place Order
   if (pathname === '/api/order' && req.method === 'POST') {
     parseJsonBody(req, res, (order) => {
       const rest = hub[order.restaurantId];
@@ -259,7 +354,6 @@ const server = http.createServer((req, res) => {
         let itemPrice = menuItem.price;
         const verifiedOptions = [];
 
-        // Validate modifiers against menu
         if (menuItem.options && Array.isArray(menuItem.options)) {
           const clientSelected = clientItem.selectedOptions || [];
           for (const group of menuItem.options) {
@@ -314,62 +408,36 @@ const server = http.createServer((req, res) => {
 
   // 10. API: Update Status & Preparation Timer
   if (pathname === '/api/order/status' && req.method === 'POST') {
-  parseJsonBody(req, res, ({ orderId, status, prepMinutes }) => {
-    const target = orders.find(o => o.id === orderId);
-    if (target) {
-      target.status = status;
-      if (status === 'HAZIRLANIYOR' && prepMinutes) {
-        target.prepMinutes = prepMinutes;
-        target.readyAt = Date.now() + prepMinutes * 60000;
+    parseJsonBody(req, res, ({ orderId, status, prepMinutes }) => {
+      const target = orders.find(o => o.id === orderId);
+      if (target) {
+        target.status = status;
+        if (status === 'HAZIRLANIYOR' && prepMinutes) {
+          target.prepMinutes = prepMinutes;
+          target.readyAt = Date.now() + prepMinutes * 60000;
+        }
+        if (status === 'HAZIR' || status === 'TAMAMLANDI') {
+          target.readyAt = null;
+        }
+        saveOrders(orders);
+        broadcast({ 
+          event: 'STATUS_CHANGE', 
+          data: { 
+            id: orderId, 
+            status: status, 
+            restaurantId: target.restaurantId,
+            readyAt: target.readyAt,
+            prepMinutes: target.prepMinutes 
+          } 
+        });
       }
-      if (status === 'HAZIR' || status === 'TAMAMLANDI') {
-        target.readyAt = null;
-      }
-      saveOrders(orders);
-      broadcast({ 
-        event: 'STATUS_CHANGE', 
-        data: { 
-          id: orderId, 
-          status: status, 
-          restaurantId: target.restaurantId,
-          readyAt: target.readyAt,
-          prepMinutes: target.prepMinutes 
-        } 
-      });
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true }));
-  });
-  return;
-}
-
-  // 11. Kitchen POS Screen
-  if (pathname === '/kitchen') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(getKitchenHTML());
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    });
     return;
   }
 
-  // 12. Student App
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(getStudentHubHTML());
-});
-
-function broadcast(payload) {
-  const msg = `data: ${JSON.stringify(payload)}\n\n`;
-  // Filter out any dead/dropped connections safely without throwing errors
-  clients = clients.filter(c => {
-    try {
-      if (c.writable) {
-        c.write(msg);
-        return true;
-      }
-    } catch (err) {}
-    return false;
-  });
-}
-
-// 11. API: Save / Update Menu Item
+  // 11. API: Save / Update Menu Item
   if (pathname === '/api/kitchen/menu/item' && req.method === 'POST') {
     parseJsonBody(req, res, ({ restaurantId, item }) => {
       const rest = hub[restaurantId];
@@ -386,12 +454,10 @@ function broadcast(payload) {
       item.price = parseFloat(item.price);
 
       if (!item.id) {
-        // Create new item
         item.id = Date.now();
         item.inStock = true;
         rest.menu.push(item);
       } else {
-        // Update existing item
         const idx = rest.menu.findIndex(m => m.id === item.id);
         if (idx !== -1) {
           rest.menu[idx] = { ...rest.menu[idx], ...item };
@@ -423,7 +489,7 @@ function broadcast(payload) {
     return;
   }
 
-  // 13. API: Update Restaurant Settings (IBAN, Account Name, Desc)
+  // 13. API: Update Restaurant Settings
   if (pathname === '/api/kitchen/settings' && req.method === 'POST') {
     parseJsonBody(req, res, ({ restaurantId, desc, iban, accountName }) => {
       const rest = hub[restaurantId];
@@ -440,30 +506,30 @@ function broadcast(payload) {
     return;
   }
 
-    // 14. Kitchen POS Screen
+  // 14. Kitchen POS Screen
   if (pathname === '/kitchen') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(getKitchenHTML());
     return;
   }
 
-    // 15. Student App (Default Route)
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(getStudentHubHTML());
-  }); // <--- THIS CLOSES http.createServer!
+  // 15. Student App (Default Route)
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(getStudentHubHTML());
+});
 
-  function broadcast(payload) {
-    const msg = `data: ${JSON.stringify(payload)}\n\n`;
-    clients = clients.filter(c => {
-      try {
-        if (c.writable) {
-          c.write(msg);
-          return true;
-        }
-      } catch (err) {}
-      return false;
-    });
-  }
+function broadcast(payload) {
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  clients = clients.filter(c => {
+    try {
+      if (c.writable) {
+        c.write(msg);
+        return true;
+      }
+    } catch (err) {}
+    return false;
+  });
+}
 
 function getStudentHubHTML() {
   return `<!DOCTYPE html>
@@ -614,7 +680,7 @@ function getStudentHubHTML() {
     let cart = [];
     let activeTicket = JSON.parse(localStorage.getItem('activeTicket') || 'null');
     let timerInterval = null;
-    let pendingItem = null; // Item currently being customized
+    let pendingItem = null;
 
     function esc(str) {
       if (!str) return '';
@@ -700,7 +766,6 @@ function getStudentHubHTML() {
       }).join('');
     }
 
-    // Opens Customizer if item has options, else adds directly
     function handleItemClick(itemId) {
       const item = activeRestaurant.menu.find(i => i.id === itemId);
       if (!item) return;
@@ -732,7 +797,6 @@ function getStudentHubHTML() {
         updateCustomizerPrice();
         document.getElementById('customizerModal').style.display = 'flex';
       } else {
-        // Direct add without customization
         cart.push({
           id: item.id,
           name: item.name,
@@ -808,7 +872,6 @@ function getStudentHubHTML() {
         '<code>' + activeRestaurant.iban + '</code><br>' +
         '<small>' + esc(activeRestaurant.accountName) + '</small>';
 
-      // Render checkout item breakdown
       document.getElementById('checkoutSummaryList').innerHTML = cart.map(i => {
         const modText = i.selectedOptions.map(o => o.name + (o.price > 0 ? ' (+' + o.price + '₺)' : '')).join(', ');
         const noteText = i.itemNote ? ' | Not: ' + esc(i.itemNote) : '';
@@ -1540,6 +1603,7 @@ function getKitchenHTML() {
 </body>
 </html>`;
 }
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Industrial Campus POS Engine v7 is running on port ${PORT}!`);
