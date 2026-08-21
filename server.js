@@ -1,4 +1,4 @@
-// server.js - Level 6: Multi-Restaurant Hub + Daily Revenue & Commission Defense Tracker
+// server.js - Level 7: Industrial Kitchen Display System & POS Engine
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -12,6 +12,8 @@ const DEFAULT_HUB = {
     id: "donerci",
     name: "Kampüs Dönercisi",
     icon: "🌯",
+    pin: "1234",
+    status: "ACIK", // ACIK, YOGUN, KAPALI
     desc: "Hatay usulü özel soslu tavuk ve et dürüm",
     iban: "TR33 0006 1005 1987 6543 2100 01",
     accountName: "Ahmet Usta - Döner",
@@ -25,6 +27,8 @@ const DEFAULT_HUB = {
     id: "tostcu",
     name: "Öğrenci Tostçusu",
     icon: "🥪",
+    pin: "5678",
+    status: "ACIK",
     desc: "Bol malzemeli çıtır bazlama ve sanayi tostları",
     iban: "TR55 0001 2009 8765 4321 0000 02",
     accountName: "Mehmet Abi - Tost",
@@ -38,6 +42,8 @@ const DEFAULT_HUB = {
     id: "pilavci",
     name: "Meşhur Pilavcı Ali Usta",
     icon: "🍚",
+    pin: "9999",
+    status: "ACIK",
     desc: "Tereyağlı nohutlu tavuklu sokak pilavı",
     iban: "TR66 0003 4001 2345 6789 0000 03",
     accountName: "Ali Usta - Pilav",
@@ -92,14 +98,54 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 2. API: Get Hub Info
+  // 2. API: Get Hub Info (Sanitized for public student app)
   if (pathname === '/api/hub' && req.method === 'GET') {
+    const sanitized = {};
+    for (let k in hub) {
+      const { pin, ...safeRest } = hub[k];
+      sanitized[k] = safeRest;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(hub));
+    res.end(JSON.stringify(sanitized));
     return;
   }
 
-  // 3. API: Get Active Orders
+  // 3. API: Kitchen Auth (Verify PIN)
+  if (pathname === '/api/kitchen/verify-pin' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const { restaurantId, pin } = JSON.parse(body);
+      const rest = hub[restaurantId];
+      if (rest && rest.pin === pin) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Hatalı PIN Kodu!' }));
+      }
+    });
+    return;
+  }
+
+  // 4. API: Update Restaurant Status (Açık/Yoğun/Kapalı)
+  if (pathname === '/api/restaurant/status' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const { restaurantId, status } = JSON.parse(body);
+      if (hub[restaurantId]) {
+        hub[restaurantId].status = status;
+        saveHub(hub);
+        broadcast({ event: 'HUB_UPDATE', data: hub });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, status }));
+    });
+    return;
+  }
+
+  // 5. API: Get Active Orders
   if (pathname === '/api/orders/active' && req.method === 'GET') {
     const restId = parsedUrl.query.restaurantId;
     let active = orders.filter(o => o.status !== 'TAMAMLANDI');
@@ -109,23 +155,40 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 4. API: Get Daily Revenue Stats for Restaurant
+  // 6. API: Get Stats
   if (pathname === '/api/stats' && req.method === 'GET') {
     const restId = parsedUrl.query.restaurantId;
-    const today = new Date().toLocaleDateString('tr-TR');
-    
-    // Filter orders for this restaurant placed today (or all current orders)
     const restOrders = orders.filter(o => o.restaurantId === restId);
     const totalRevenue = restOrders.reduce((sum, o) => sum + (o.total || 0), 0);
     const orderCount = restOrders.length;
-    const commissionSaved = Math.round(totalRevenue * 0.30); // 30% saved from app fees
-
+    const commissionSaved = Math.round(totalRevenue * 0.30);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ totalRevenue, orderCount, commissionSaved }));
     return;
   }
 
-  // 5. API: Toggle Item Stock
+  // 7. API: Download Z-Raporu (CSV Export)
+  if (pathname === '/api/reports/z-raporu' && req.method === 'GET') {
+    const restId = parsedUrl.query.restaurantId;
+    const rest = hub[restId] || { name: "Restoran" };
+    const restOrders = orders.filter(o => o.restaurantId === restId);
+
+    let csv = `\uFEFFSiparis No;Tarih;Saat;Musteri;Teslimat;Odeme;Urunler;Tutar TL;Durum\r\n`;
+    restOrders.forEach(o => {
+      const itemsStr = o.items.map(i => `${i.name} (x1)`).join(' + ');
+      csv += `${o.id};${o.date || ''};${o.time || ''};"${o.customer}";${o.type};${o.payment};"${itemsStr}";${o.total};${o.status}\r\n`;
+    });
+
+    const fileName = `Z_Raporu_${restId}_${new Date().toISOString().slice(0,10)}.csv`;
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${fileName}"`
+    });
+    res.end(csv);
+    return;
+  }
+
+  // 8. API: Toggle Stock
   if (pathname === '/api/menu/toggle-stock' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -141,19 +204,29 @@ const server = http.createServer((req, res) => {
         }
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, hub }));
+      res.end(JSON.stringify({ success: true }));
     });
     return;
   }
 
-  // 6. API: Place Order
+  // 9. API: Place Order
   if (pathname === '/api/order' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       const order = JSON.parse(body);
+      
+      // Block if restaurant is KAPALI
+      if (hub[order.restaurantId] && hub[order.restaurantId].status === 'KAPALI') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Dükkan şu an kapalıdır.' }));
+        return;
+      }
+
       order.id = Math.floor(1000 + Math.random() * 9000);
+      order.token = Math.floor(10 + Math.random() * 90); // 2-digit high contrast pickup token
       order.status = 'BEKLIYOR';
+      order.prepTime = null;
       order.date = new Date().toLocaleDateString('tr-TR');
       order.time = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
       
@@ -163,22 +236,23 @@ const server = http.createServer((req, res) => {
       broadcast({ event: 'NEW_ORDER', data: order });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, orderId: order.id }));
+      res.end(JSON.stringify({ success: true, orderId: order.id, token: order.token }));
     });
     return;
   }
 
-  // 7. API: Update Status
+  // 10. API: Update Status & Prep Time
   if (pathname === '/api/order/status' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
-      const { orderId, status } = JSON.parse(body);
+      const { orderId, status, prepMinutes } = JSON.parse(body);
       const target = orders.find(o => o.id === orderId);
       if (target) {
         target.status = status;
+        if (prepMinutes) target.prepMinutes = prepMinutes;
         saveOrders(orders);
-        broadcast({ event: 'STATUS_CHANGE', data: { id: orderId, status: status, restaurantId: target.restaurantId } });
+        broadcast({ event: 'STATUS_CHANGE', data: { id: orderId, status: status, prepMinutes: target.prepMinutes, restaurantId: target.restaurantId } });
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));
@@ -186,14 +260,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 8. Kitchen Page
+  // 11. Kitchen Page
   if (pathname === '/kitchen') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(getKitchenHTML());
     return;
   }
 
-  // 9. Student Hub App
+  // 12. Student App
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(getStudentHubHTML());
 });
@@ -216,51 +290,70 @@ function getStudentHubHTML() {
     header { background: #111827; color: white; padding: 1.2rem; text-align: center; }
     .badge { background: #10b981; color: white; padding: 4px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: bold; }
     .container { max-width: 500px; margin: auto; padding: 1rem; }
+    
+    .status-banner { padding: 10px; border-radius: 8px; font-weight: bold; margin-bottom: 1rem; font-size: 0.85rem; display: none; }
+    .status-banner.yogun { background: #fef3c7; border: 1px solid #f59e0b; color: #b45309; display: block; }
+    .status-banner.kapali { background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; display: block; }
+
     .rest-card { background: white; border-radius: 12px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.06); cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
     .rest-card:hover { border-color: #2563eb; transform: translateY(-2px); }
     .rest-header { display: flex; align-items: center; gap: 12px; }
     .rest-icon { font-size: 2.2rem; background: #f3f4f6; padding: 8px; border-radius: 12px; }
+    
     .card { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
     .card.out-of-stock { opacity: 0.5; background: #e5e7eb; }
     .price { font-weight: bold; color: #059669; font-size: 1.1rem; margin-top: 4px; }
     button.add { background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     button.add.disabled { background: #9ca3af; cursor: not-allowed; }
-    .back-btn { background: #374151; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 6px; }
+    
+    .back-btn { background: #374151; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 1rem; }
     .cart-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 1rem; border-top: 1px solid #e5e7eb; }
     .cart-btn { background: #059669; color: white; width: 100%; max-width: 500px; margin: auto; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; }
+    .cart-btn.disabled { background: #9ca3af; cursor: not-allowed; }
+    
     #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 1rem; }
     .modal-content { background: white; border-radius: 16px; max-width: 450px; width: 100%; padding: 1.5rem; }
     input, select { width: 100%; padding: 10px; margin: 6px 0 12px; border: 1px solid #d1d5db; border-radius: 8px; }
     .iban-box { background: #fef3c7; border: 1px dashed #d97706; padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
-    #tracker { display: none; background: #dbeafe; border-left: 5px solid #2563eb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    
+    #tracker { display: none; background: #dbeafe; border-left: 6px solid #2563eb; padding: 1.2rem; border-radius: 10px; margin-bottom: 1rem; }
+    .token-badge { background: #1e40af; color: white; padding: 4px 10px; border-radius: 6px; font-size: 1.2rem; font-weight: bold; }
+    .timer-badge { background: #f59e0b; color: white; padding: 3px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; display: inline-block; margin-top: 6px; }
   </style>
 </head>
 <body>
   <header>
     <h2>🎓 Kampüs Yemek Masası</h2>
-    <p style="font-size:0.85rem; color:#9ca3af; margin-top:4px;"><span class="badge">0% Komisyon</span> Kampüs İçi Doğrudan Sipariş</p>
+    <p style="font-size:0.85rem; color:#9ca3af; margin-top:4px;"><span class="badge">0% Komisyon</span> Doğrudan Kampüs Esnafı</p>
   </header>
 
   <div class="container">
     <div id="tracker">
-      <h4>📦 Aktif Siparişiniz: <span id="trackOrderId"></span> (<span id="trackRestName"></span>)</h4>
-      <p style="margin-top:4px; font-weight:bold; color:#1e40af;" id="trackStatus">Mutfak Onayı Bekleniyor...</p>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h4>📦 Sipariş: <span id="trackOrderId"></span> (<span id="trackRestName"></span>)</h4>
+        <span class="token-badge" id="trackToken">#--</span>
+      </div>
+      <p style="margin-top:6px; font-weight:bold; color:#1e40af;" id="trackStatus">Mutfak Onayı Bekleniyor...</p>
+      <div id="trackTimer" class="timer-badge" style="display:none;">⏱️ Tahmini Hazırlık: -- dk</div>
     </div>
 
+    <!-- View 1: Restaurant Directory -->
     <div id="hubDirectoryView">
       <h3 style="margin-bottom: 12px; color: #374151;">Dükkan Seçin:</h3>
       <div id="restaurantsList"></div>
     </div>
 
+    <!-- View 2: Restaurant Menu -->
     <div id="restaurantMenuView" style="display:none;">
       <button class="back-btn" onclick="showDirectory()">← Tüm Restoranlar</button>
+      <div id="shopStatusBanner" class="status-banner"></div>
       <div id="selectedRestHeader" style="margin-bottom: 1rem;"></div>
       <div id="menuContainer"></div>
     </div>
   </div>
 
   <div class="cart-bar" id="cartBar" style="display:none;">
-    <button class="cart-btn" onclick="openCheckout()">
+    <button class="cart-btn" id="mainCartBtn" onclick="openCheckout()">
       <span id="cartCount">0 Ürün</span>
       <span>Siparişi Tamamla (<span id="cartTotal">0</span> ₺)</span>
     </button>
@@ -282,7 +375,7 @@ function getStudentHubHTML() {
         <option value="FAST / Havale">FAST / Havale İle Gönderdim</option>
         <option value="Kapıda Nakit/POS">Teslimde Nakit / Kart</option>
       </select>
-      <button class="cart-btn" style="background:#2563eb; width:100%;" onclick="submitOrder()">Siparişi Dükkana Gönder</button>
+      <button class="cart-btn" id="submitOrderBtn" style="background:#2563eb; width:100%;" onclick="submitOrder()">Siparişi Dükkana Gönder</button>
       <button style="width:100%; border:none; background:none; color:#6b7280; margin-top:8px; cursor:pointer;" onclick="closeCheckout()">İptal</button>
     </div>
   </div>
@@ -303,11 +396,17 @@ function getStudentHubHTML() {
     function renderDirectory() {
       const list = document.getElementById('restaurantsList');
       list.innerHTML = Object.values(hubData).map(function(r) {
+        let tag = '<span style="color:#10b981; font-weight:bold; font-size:0.8rem;">● Açık</span>';
+        if (r.status === 'YOGUN') tag = '<span style="color:#f59e0b; font-weight:bold; font-size:0.8rem;">● Yoğun (+20dk)</span>';
+        if (r.status === 'KAPALI') tag = '<span style="color:#ef4444; font-weight:bold; font-size:0.8rem;">● Kapalı</span>';
+
         return '<div class="rest-card" onclick="openRestaurant(\\'' + r.id + '\\')">' +
           '<div class="rest-header">' +
             '<span class="rest-icon">' + r.icon + '</span>' +
-            '<div>' +
-              '<h3>' + r.name + '</h3>' +
+            '<div style="flex:1;">' +
+              '<div style="display:flex; justify-content:space-between;">' +
+                '<h3>' + r.name + '</h3>' + tag +
+              '</div>' +
               '<p style="color:#6b7280; font-size:0.85rem; margin-top:2px;">' + r.desc + '</p>' +
             '</div>' +
           '</div>' +
@@ -319,6 +418,16 @@ function getStudentHubHTML() {
       activeRestaurant = hubData[id];
       document.getElementById('hubDirectoryView').style.display = 'none';
       document.getElementById('restaurantMenuView').style.display = 'block';
+
+      const banner = document.getElementById('shopStatusBanner');
+      banner.className = 'status-banner';
+      if (activeRestaurant.status === 'YOGUN') {
+        banner.className = 'status-banner yogun';
+        banner.innerText = '⚠️ Mutfak çok yoğun! Sipariş teslimatı +20 dakika gecikebilir.';
+      } else if (activeRestaurant.status === 'KAPALI') {
+        banner.className = 'status-banner kapali';
+        banner.innerText = '⛔ Dükkan şu anda kapalıdır ve sipariş kabul etmemektedir.';
+      }
 
       document.getElementById('selectedRestHeader').innerHTML =
         '<div style="display:flex; align-items:center; gap:10px;">' +
@@ -339,13 +448,15 @@ function getStudentHubHTML() {
 
     function renderMenu() {
       if (!activeRestaurant) return;
+      const isClosed = activeRestaurant.status === 'KAPALI';
       const cont = document.getElementById('menuContainer');
       cont.innerHTML = activeRestaurant.menu.map(function(item) {
-        const stockClass = item.inStock ? '' : 'out-of-stock';
-        const badge = item.inStock ? '' : '<span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>';
-        const btn = item.inStock
+        const canAdd = item.inStock && !isClosed;
+        const stockClass = canAdd ? '' : 'out-of-stock';
+        const badge = item.inStock ? (isClosed ? '<span style="color:#ef4444; font-size:0.8rem;">(Kapalı)</span>' : '') : '<span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>';
+        const btn = canAdd
           ? '<button class="add" onclick="addToCart(' + item.id + ', \\'' + item.name + '\\', ' + item.price + ')">+ Ekle</button>'
-          : '<button class="add disabled" disabled>Tükendi</button>';
+          : '<button class="add disabled" disabled>' + (isClosed ? 'Kapalı' : 'Tükendi') + '</button>';
         return '<div class="card ' + stockClass + '">' +
           '<div><h3>' + item.name + ' ' + badge + '</h3>' +
           '<p style="color:#6b7280; font-size:0.85rem;">' + item.desc + '</p>' +
@@ -361,7 +472,9 @@ function getStudentHubHTML() {
         hubData = payload.data;
         if (activeRestaurant) {
           activeRestaurant = hubData[activeRestaurant.id];
-          renderMenu();
+          openRestaurant(activeRestaurant.id);
+        } else {
+          renderDirectory();
         }
       } else if (payload.event === 'STATUS_CHANGE' && payload.data.id === currentTrackingId) {
         const labels = {
@@ -371,6 +484,11 @@ function getStudentHubHTML() {
           'TAMAMLANDI': '🎉 Teslim Edildi. Afiyet olsun!'
         };
         document.getElementById('trackStatus').innerText = labels[payload.data.status] || payload.data.status;
+        if (payload.data.prepMinutes) {
+          const t = document.getElementById('trackTimer');
+          t.style.display = 'inline-block';
+          t.innerText = '⏱️ Tahmini Hazırlanma Süresi: ~' + payload.data.prepMinutes + ' dk';
+        }
       }
     };
 
@@ -390,6 +508,7 @@ function getStudentHubHTML() {
     }
 
     function openCheckout() {
+      if (activeRestaurant.status === 'KAPALI') return alert('Dükkan şu an kapalıdır!');
       document.getElementById('modalRestTitle').innerText = activeRestaurant.name + ' - Sipariş';
       document.getElementById('modalIbanBox').innerHTML =
         '<strong>Doğrudan FAST / Havale:</strong><br>' +
@@ -419,10 +538,12 @@ function getStudentHubHTML() {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
+      if (!data.success) return alert(data.message || 'Sipariş iletilemedi!');
 
       currentTrackingId = data.orderId;
       document.getElementById('tracker').style.display = 'block';
       document.getElementById('trackOrderId').innerText = '#' + data.orderId;
+      document.getElementById('trackToken').innerText = '#' + data.token;
       document.getElementById('trackRestName').innerText = activeRestaurant.name;
       document.getElementById('trackStatus').innerText = '⏳ Sipariş dükkana iletildi, usta bekliyor...';
 
@@ -440,22 +561,34 @@ function getKitchenHTML() {
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>Mutfak Portalı - Kampüs Masası</title>
+  <title>Mutfak KDS & POS - Kampüs Masası</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    body { background: #0f172a; color: white; padding: 1.5rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 1rem; flex-wrap: wrap; gap: 10px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0b1120; color: white; padding: 1.5rem; }
+    
+    /* Top Bar */
+    .topbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; padding-bottom: 1rem; flex-wrap: wrap; gap: 12px; }
     .sound-btn { background: #10b981; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     select.rest-select { background: #1e293b; color: white; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; font-size: 1rem; }
     
-    /* Stats & Revenue Dashboard */
+    /* Shop Master Status Switch */
+    .status-group { display: flex; gap: 6px; background: #1e293b; padding: 4px; border-radius: 8px; }
+    .status-btn { padding: 6px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.8rem; background: transparent; color: #94a3b8; }
+    .status-btn.active-acik { background: #10b981; color: white; }
+    .status-btn.active-yogun { background: #f59e0b; color: white; }
+    .status-btn.active-kapali { background: #ef4444; color: white; }
+
+    /* Stats Bar */
     .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
-    .stat-card { background: #1e293b; padding: 1.2rem; border-radius: 10px; border-left: 5px solid #3b82f6; }
+    .stat-card { background: #1e293b; padding: 1.2rem; border-radius: 10px; border-left: 5px solid #3b82f6; position: relative; }
     .stat-card.revenue { border-left-color: #10b981; }
-    .stat-card.saved { border-left-color: #f59e0b; background: #1e293b; }
+    .stat-card.saved { border-left-color: #f59e0b; }
     .stat-label { font-size: 0.8rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
     .stat-value { font-size: 1.6rem; font-weight: bold; margin-top: 4px; display: block; color: white; }
     
+    .z-btn { background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.8rem; margin-top: 6px; }
+
+    /* Stock Bar */
     .stock-bar { background: #1e293b; padding: 1rem; border-radius: 10px; margin-top: 1rem; }
     .stock-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
     .stock-item { background: #334155; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
@@ -463,28 +596,70 @@ function getKitchenHTML() {
     .in-stock { background: #10b981; color: white; }
     .out-stock { background: #ef4444; color: white; }
     
+    /* Orders Grid (KDS) */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
-    .order-card { background: #1e293b; border-left: 6px solid #f59e0b; border-radius: 10px; padding: 1.2rem; transition: 0.3s; }
+    .order-card { background: #1e293b; border-left: 6px solid #f59e0b; border-radius: 10px; padding: 1.2rem; transition: 0.3s; position: relative; }
     .order-card.hazirlaniyor { border-left-color: #3b82f6; }
     .order-card.hazir { border-left-color: #10b981; }
     .order-card.tamamlandi { opacity: 0.3; }
+    
+    .token-chip { background: #3b82f6; color: white; padding: 4px 10px; border-radius: 6px; font-size: 1.2rem; font-weight: bold; }
+    
+    .prep-timer-box { display: flex; gap: 4px; margin-top: 8px; }
+    .prep-timer-box button { flex: 1; padding: 6px; border: none; border-radius: 4px; background: #3b82f6; color: white; font-weight: bold; cursor: pointer; font-size: 0.75rem; }
+    
     .actions { display: flex; gap: 6px; margin-top: 12px; }
-    .actions button { flex: 1; padding: 8px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.8rem; }
-    .btn-prep { background: #3b82f6; color: white; }
+    .actions button { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
     .btn-ready { background: #10b981; color: white; }
     .btn-done { background: #475569; color: white; }
+    .btn-print { background: #334155; color: #94a3b8; }
+
+    /* PIN Lock Modal */
+    #pinModal { display: flex; position: fixed; inset: 0; background: #0b1120; align-items: center; justify-content: center; z-index: 999; }
+    .pin-box { background: #1e293b; padding: 2rem; border-radius: 16px; text-align: center; max-width: 350px; width: 100%; }
+    .pin-box input { width: 100%; padding: 14px; font-size: 1.5rem; text-align: center; letter-spacing: 8px; border-radius: 8px; border: 1px solid #475569; background: #0b1120; color: white; margin: 1rem 0; }
+    .pin-btn { background: #10b981; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+
+    /* Print Styling for 80mm POS Thermal Receipt */
+    @media print {
+      body * { visibility: hidden; }
+      .printable-receipt, .printable-receipt * { visibility: visible; color: black !important; background: white !important; }
+      .printable-receipt { position: absolute; left: 0; top: 0; width: 80mm; font-family: monospace; font-size: 12px; padding: 5mm; }
+    }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <div style="display:flex; align-items:center; gap:10px;">
-      <h2>🍳 Mutfak & Kasa Paneli:</h2>
-      <select class="rest-select" id="restaurantSelector" onchange="switchRestaurant(this.value)"></select>
+  <!-- PIN Code Lock Screen -->
+  <div id="pinModal">
+    <div class="pin-box">
+      <h2>🔒 Mutfak Girişi</h2>
+      <p style="color:#94a3b8; font-size:0.85rem; margin-top:4px;">4 Haneli PIN Kodunuzu Girin</p>
+      <input type="password" maxlength="4" id="pinInput" placeholder="••••" autofocus>
+      <button class="pin-btn" onclick="verifyPin()">Panele Giriş Yap</button>
+      <p id="pinError" style="color:#ef4444; font-size:0.85rem; margin-top:8px; display:none;">Hatalı PIN!</p>
     </div>
-    <button class="sound-btn" id="audioToggle" onclick="initAudio()">🔔 Sesi Aktif Et</button>
   </div>
 
-  <!-- Live Revenue & Anti-Commission Widget -->
+  <div class="topbar">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <h2>🍳 KDS Paneli:</h2>
+      <select class="rest-select" id="restaurantSelector" onchange="switchRestaurant(this.value)"></select>
+      
+      <!-- Master Shop Status Switch -->
+      <div class="status-group" id="statusGroup">
+        <button class="status-btn" id="btnAcik" onclick="setShopStatus('ACIK')">🟢 Açık</button>
+        <button class="status-btn" id="btnYogun" onclick="setShopStatus('YOGUN')">🟡 Yoğun</button>
+        <button class="status-btn" id="btnKapali" onclick="setShopStatus('KAPALI')">🔴 Kapalı</button>
+      </div>
+    </div>
+    
+    <div style="display:flex; gap:8px;">
+      <button class="sound-btn" id="audioToggle" onclick="initAudio()">🔔 Sesi Aktif Et</button>
+      <button class="z-btn" onclick="downloadZRaporu()">📥 Z-Raporu (.CSV)</button>
+    </div>
+  </div>
+
+  <!-- Live Stats -->
   <div class="stats-bar">
     <div class="stat-card revenue">
       <span class="stat-label">💰 Toplam Ciro</span>
@@ -497,21 +672,87 @@ function getKitchenHTML() {
     <div class="stat-card saved">
       <span class="stat-label">🛡️ Kurtarılan Komisyon (~%30)</span>
       <span class="stat-value" id="statSaved" style="color:#f59e0b;">+0 ₺</span>
-      <small style="color:#94a3b8; font-size:0.75rem;">Yemeksepeti/Trendyol'a kaptırılmayan para</small>
     </div>
   </div>
 
   <div class="stock-bar">
-    <h4>🍲 Bu Dükkanın Stok Kontrolü:</h4>
+    <h4>🍲 Hızlı Stok Kontrolü:</h4>
     <div class="stock-grid" id="stockContainer"></div>
   </div>
 
   <div class="grid" id="ordersGrid"></div>
 
+  <!-- Hidden Container for Thermal Printing -->
+  <div id="printArea" class="printable-receipt" style="display:none;"></div>
+
   <script>
     let audioCtx = null;
     let hubData = {};
     let currentRestId = "donerci";
+
+    async function initKitchen() {
+      const res = await fetch('/api/hub');
+      hubData = await res.json();
+      
+      const sel = document.getElementById('restaurantSelector');
+      sel.innerHTML = Object.values(hubData).map(function(r) {
+        return '<option value="' + r.id + '">' + r.icon + ' ' + r.name + '</option>';
+      }).join('');
+      
+      // Auto-unlock if session pin exists
+      if (sessionStorage.getItem('kds_unlocked_' + currentRestId)) {
+        document.getElementById('pinModal').style.display = 'none';
+        loadRestaurantDashboard();
+      }
+    }
+    initKitchen();
+
+    async function verifyPin() {
+      const pin = document.getElementById('pinInput').value;
+      const res = await fetch('/api/kitchen/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: currentRestId, pin: pin })
+      });
+      const data = await res.json();
+      if (data.success) {
+        sessionStorage.setItem('kds_unlocked_' + currentRestId, 'true');
+        document.getElementById('pinModal').style.display = 'none';
+        loadRestaurantDashboard();
+      } else {
+        document.getElementById('pinError').style.display = 'block';
+      }
+    }
+
+    function switchRestaurant(newId) {
+      currentRestId = newId;
+      if (!sessionStorage.getItem('kds_unlocked_' + currentRestId)) {
+        document.getElementById('pinInput').value = '';
+        document.getElementById('pinModal').style.display = 'flex';
+      } else {
+        document.getElementById('pinModal').style.display = 'none';
+        loadRestaurantDashboard();
+      }
+    }
+
+    async function setShopStatus(status) {
+      await fetch('/api/restaurant/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: currentRestId, status: status })
+      });
+      updateStatusButtons(status);
+    }
+
+    function updateStatusButtons(status) {
+      document.getElementById('btnAcik').className = 'status-btn ' + (status === 'ACIK' ? 'active-acik' : '');
+      document.getElementById('btnYogun').className = 'status-btn ' + (status === 'YOGUN' ? 'active-yogun' : '');
+      document.getElementById('btnKapali').className = 'status-btn ' + (status === 'KAPALI' ? 'active-kapali' : '');
+    }
+
+    function downloadZRaporu() {
+      window.location.href = '/api/reports/z-raporu?restaurantId=' + currentRestId;
+    }
 
     function initAudio() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -537,30 +778,12 @@ function getKitchenHTML() {
       osc.stop(now + 0.8);
     }
 
-    async function initKitchen() {
-      const res = await fetch('/api/hub');
-      hubData = await res.json();
-      
-      const sel = document.getElementById('restaurantSelector');
-      sel.innerHTML = Object.values(hubData).map(function(r) {
-        return '<option value="' + r.id + '">' + r.icon + ' ' + r.name + '</option>';
-      }).join('');
-      
-      loadRestaurantDashboard();
-    }
-    initKitchen();
-
-    function switchRestaurant(newId) {
-      currentRestId = newId;
-      loadRestaurantDashboard();
-    }
-
     async function loadRestaurantDashboard() {
       document.getElementById('ordersGrid').innerHTML = '';
       
-      // 1. Render stock switches
       const rest = hubData[currentRestId];
       if (rest) {
+        updateStatusButtons(rest.status || 'ACIK');
         document.getElementById('stockContainer').innerHTML = rest.menu.map(function(item) {
           const btnClass = item.inStock ? 'in-stock' : 'out-stock';
           const label = item.inStock ? '🟢 Stokta' : '🔴 Tükendi';
@@ -571,10 +794,8 @@ function getKitchenHTML() {
         }).join('');
       }
 
-      // 2. Fetch stats for this restaurant
       refreshStats();
 
-      // 3. Fetch orders
       const res = await fetch('/api/orders/active?restaurantId=' + currentRestId);
       const activeOrders = await res.json();
       activeOrders.forEach(renderCard);
@@ -589,33 +810,30 @@ function getKitchenHTML() {
     }
 
     async function toggleStock(itemId) {
-      const res = await fetch('/api/menu/toggle-stock', {
+      await fetch('/api/menu/toggle-stock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ restaurantId: currentRestId, itemId: itemId })
       });
-      const data = await res.json();
-      hubData = data.hub;
+      const res = await fetch('/api/hub');
+      hubData = await res.json();
       loadRestaurantDashboard();
     }
 
     const evtSource = new EventSource('/api/stream');
     evtSource.onmessage = function(event) {
       const msg = JSON.parse(event.data);
-      if (msg.event === 'NEW_ORDER') {
-        if (msg.data.restaurantId === currentRestId) {
-          playChime();
-          renderCard(msg.data);
-          refreshStats();
-        }
-      } else if (msg.event === 'STATUS_CHANGE') {
-        if (msg.data.restaurantId === currentRestId) {
-          updateCardUI(msg.data.id, msg.data.status);
-          refreshStats();
-        }
+      if (msg.event === 'NEW_ORDER' && msg.data.restaurantId === currentRestId) {
+        playChime();
+        renderCard(msg.data);
+        refreshStats();
+      } else if (msg.event === 'STATUS_CHANGE' && msg.data.restaurantId === currentRestId) {
+        updateCardUI(msg.data.id, msg.data.status, msg.data.prepMinutes);
+        refreshStats();
       } else if (msg.event === 'HUB_UPDATE') {
         hubData = msg.data;
-        loadRestaurantDashboard();
+        const rest = hubData[currentRestId];
+        if (rest) updateStatusButtons(rest.status);
       }
     };
 
@@ -625,21 +843,37 @@ function getKitchenHTML() {
       card.id = 'order-' + order.id;
       card.className = 'order-card ' + order.status.toLowerCase();
       const itemsList = order.items.map(function(i) { return '<li>' + i.name + ' (' + i.price + ' TL)</li>'; }).join('');
+      
       card.innerHTML =
-        '<div style="display:flex; justify-content:space-between;">' +
-          '<h3>#' + order.id + '</h3>' +
-          '<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.75rem;">' + order.time + '</span>' +
+        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+          '<div><h3>#' + order.id + '</h3><small style="color:#94a3b8;">' + order.time + '</small></div>' +
+          '<span class="token-chip">#' + (order.token || '--') + '</span>' +
         '</div>' +
-        '<p style="margin:6px 0;"><strong>' + order.customer + '</strong></p>' +
+        '<p style="margin:8px 0 4px;"><strong>' + order.customer + '</strong></p>' +
         '<p style="color:#94a3b8; font-size:0.85rem;">' + order.type + ' | ' + order.payment + '</p>' +
         '<ul style="margin:8px 0 8px 18px;">' + itemsList + '</ul>' +
         '<h2 style="color:#10b981; margin-bottom:8px;">' + order.total + ' ₺</h2>' +
+        
+        '<div class="prep-timer-box">' +
+          '<button onclick="startPrep(' + order.id + ', 10)">🔥 10 Dk</button>' +
+          '<button onclick="startPrep(' + order.id + ', 20)">🔥 20 Dk</button>' +
+          '<button onclick="startPrep(' + order.id + ', 35)">🔥 35 Dk</button>' +
+        '</div>' +
+
         '<div class="actions">' +
-          '<button class="btn-prep" onclick="setStatus(' + order.id + ', \\'HAZIRLANIYOR\\')">🔥 Hazırla</button>' +
+          '<button class="btn-print" onclick="printReceipt(' + order.id + ')">🖨️ Fiş</button>' +
           '<button class="btn-ready" onclick="setStatus(' + order.id + ', \\'HAZIR\\')">✅ Hazır</button>' +
           '<button class="btn-done" onclick="setStatus(' + order.id + ', \\'TAMAMLANDI\\')">📦 Bitti</button>' +
         '</div>';
       document.getElementById('ordersGrid').prepend(card);
+    }
+
+    async function startPrep(orderId, minutes) {
+      await fetch('/api/order/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: orderId, status: 'HAZIRLANIYOR', prepMinutes: minutes })
+      });
     }
 
     async function setStatus(orderId, status) {
@@ -650,19 +884,43 @@ function getKitchenHTML() {
       });
     }
 
-    function updateCardUI(id, status) {
+    function updateCardUI(id, status, prepMinutes) {
       const card = document.getElementById('order-' + id);
       if (!card) return;
       card.className = 'order-card ' + status.toLowerCase();
       if (status === 'TAMAMLANDI') setTimeout(function() { card.remove(); }, 1000);
+    }
+
+    function printReceipt(orderId) {
+      const target = hubData[currentRestId];
+      const card = document.getElementById('order-' + orderId);
+      if (!card) return;
+
+      const pArea = document.getElementById('printArea');
+      pArea.innerHTML =
+        '================================<br>' +
+        '<center><h2>' + (target ? target.name : 'KAMPUS MASASI') + '</h2></center>' +
+        '================================<br>' +
+        '<b>FIS NO: #' + orderId + '</b><br>' +
+        'Tarih: ' + new Date().toLocaleString('tr-TR') + '<br>' +
+        '--------------------------------<br>' +
+        card.querySelector('p').innerText + '<br>' +
+        card.querySelector('ul').innerHTML.replace(/<\\/li>/g, '<br>').replace(/<li>/g, '- ') + '<br>' +
+        '--------------------------------<br>' +
+        '<b>TOPLAM TUTAR: ' + card.querySelector('h2').innerText + '</b><br>' +
+        '================================<br>' +
+        '<center>AFIYET OLSUN!</center>';
+      
+      pArea.style.display = 'block';
+      window.print();
+      pArea.style.display = 'none';
     }
   </script>
 </body>
 </html>`;
 }
 
-const PORT = process.env.PORT || 3000; server.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 Campus Hub v6 (Revenue & Anti-Commission Tracker) is live!');
-  console.log('📱 Student Directory: http://localhost:3000');
-  console.log('🍳 Kitchen & Kasa:    http://localhost:3000/kitchen');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Industrial Campus POS Engine v7 is live on port ${PORT}!`);
 });
