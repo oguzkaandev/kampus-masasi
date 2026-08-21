@@ -135,19 +135,26 @@ const server = http.createServer((req, res) => {
   }
 
   // 3. API: Kitchen Auth / Verify PIN
+  // 3. API: Kitchen Auth / Verify PIN
   if (pathname === '/api/kitchen/auth' && req.method === 'POST') {
-  parseJsonBody(req, res, ({ restaurantId, pin }) => {
-    const rest = hub[restaurantId];
-    if (rest && rest.pin === pin) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-    } else {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, message: 'Hatalı PIN Kodu!' }));
-    }
-  });
-  return;
-}
+    parseJsonBody(req, res, (data) => {
+      const restaurantId = data.restaurantId || 'donerci';
+      const pin = String(data.pin || '').trim();
+      const rest = hub[restaurantId];
+
+      // Logs to Render console so you can see what is happening
+      console.log(`[AUTH] Restaurant: ${restaurantId} | Sent: "${pin}" | Expected: "${rest ? rest.pin : 'NOT FOUND'}"`);
+
+      if (rest && String(rest.pin).trim() === pin) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Hatalı PIN Kodu!' }));
+      }
+    });
+    return;
+  }
   // 4. API: Change Restaurant Operating Status (Open/Busy/Closed)
   if (pathname === '/api/kitchen/store-status' && req.method === 'POST') {
   parseJsonBody(req, res, ({ restaurantId, status }) => {
@@ -798,18 +805,20 @@ function getKitchenHTML() {
     }
 
     async function verifyPin() {
-      const pin = document.getElementById('pinCode').value;
+      const pin = document.getElementById('pinCode').value.trim();
+      const targetRest = currentRestId || "donerci";
+      
       const res = await fetch('/api/kitchen/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantId: currentRestId, pin: pin })
+        body: JSON.stringify({ restaurantId: targetRest, pin: pin })
       });
       const data = await res.json();
       if (data.success) {
         localStorage.setItem('kitchenAuth', 'true');
         document.getElementById('authModal').style.display = 'none';
       } else {
-        alert(data.message);
+        alert(data.message || 'Hatalı PIN Kodu!');
       }
     }
 
