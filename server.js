@@ -369,6 +369,102 @@ function broadcast(payload) {
   });
 }
 
+// 11. API: Save / Update Menu Item
+  if (pathname === '/api/kitchen/menu/item' && req.method === 'POST') {
+    parseJsonBody(req, res, ({ restaurantId, item }) => {
+      const rest = hub[restaurantId];
+      if (!rest) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Dükkan bulunamadı' }));
+      }
+
+      if (!item.name || isNaN(item.price)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Ürün adı ve fiyatı zorunludur' }));
+      }
+
+      item.price = parseFloat(item.price);
+
+      if (!item.id) {
+        // Create new item
+        item.id = Date.now();
+        item.inStock = true;
+        rest.menu.push(item);
+      } else {
+        // Update existing item
+        const idx = rest.menu.findIndex(m => m.id === item.id);
+        if (idx !== -1) {
+          rest.menu[idx] = { ...rest.menu[idx], ...item };
+        } else {
+          rest.menu.push(item);
+        }
+      }
+
+      saveHub(hub);
+      broadcast({ event: 'HUB_UPDATE', data: hub });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, hub }));
+    });
+    return;
+  }
+
+  // 12. API: Delete Menu Item
+  if (pathname === '/api/kitchen/menu/item/delete' && req.method === 'POST') {
+    parseJsonBody(req, res, ({ restaurantId, itemId }) => {
+      const rest = hub[restaurantId];
+      if (rest) {
+        rest.menu = rest.menu.filter(m => m.id !== itemId);
+        saveHub(hub);
+        broadcast({ event: 'HUB_UPDATE', data: hub });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, hub }));
+    });
+    return;
+  }
+
+  // 13. API: Update Restaurant Settings (IBAN, Account Name, Desc)
+  if (pathname === '/api/kitchen/settings' && req.method === 'POST') {
+    parseJsonBody(req, res, ({ restaurantId, desc, iban, accountName }) => {
+      const rest = hub[restaurantId];
+      if (rest) {
+        if (desc !== undefined) rest.desc = desc;
+        if (iban !== undefined) rest.iban = iban;
+        if (accountName !== undefined) rest.accountName = accountName;
+        saveHub(hub);
+        broadcast({ event: 'HUB_UPDATE', data: hub });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, hub }));
+    });
+    return;
+  }
+
+    // 14. Kitchen POS Screen
+  if (pathname === '/kitchen') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(getKitchenHTML());
+    return;
+  }
+
+    // 15. Student App (Default Route)
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(getStudentHubHTML());
+  }); // <--- THIS CLOSES http.createServer!
+
+  function broadcast(payload) {
+    const msg = `data: ${JSON.stringify(payload)}\n\n`;
+    clients = clients.filter(c => {
+      try {
+        if (c.writable) {
+          c.write(msg);
+          return true;
+        }
+      } catch (err) {}
+      return false;
+    });
+  }
+
 function getStudentHubHTML() {
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -835,7 +931,7 @@ function getKitchenHTML() {
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>Mutfak POS Paneli</title>
+  <title>Mutfak POS & Menü Yönetimi</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 1.5rem; }
@@ -850,8 +946,9 @@ function getKitchenHTML() {
     .status-btn.active-busy { background: #d97706; color: white; }
     .status-btn.active-closed { background: #dc2626; color: white; }
 
-    .sound-btn { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-    .z-btn { background: #059669; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .menu-btn { background: #8b5cf6; color: white; border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .sound-btn { background: #2563eb; color: white; border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .z-btn { background: #059669; color: white; border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     
     /* Stats Widget */
     .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
@@ -882,8 +979,20 @@ function getKitchenHTML() {
     .btn-done { background: #475569; color: white; }
     .btn-print { background: #64748b; color: white; flex: 0.5 !important; }
 
+    /* Modals */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
+    .modal-box { background: #1e293b; border-radius: 14px; max-width: 580px; width: 100%; padding: 1.5rem; max-height: 90vh; overflow-y: auto; border: 1px solid #334155; }
+    
+    /* Menu Item Rows */
+    .menu-mgmt-row { background: #0f172a; border: 1px solid #334155; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .btn-edit { background: #3b82f6; color: white; padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; margin-right: 6px; }
+    .btn-del { background: #ef4444; color: white; padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+    
+    input[type="text"], input[type="number"], textarea { width: 100%; padding: 10px; margin: 6px 0 12px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 0.95rem; }
+    .btn-action { background: #10b981; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; }
+
     /* Auth PIN Modal */
-    #authModal { position: fixed; inset: 0; background: #090d16; display: flex; align-items: center; justify-content: center; z-index: 100; }
+    #authModal { position: fixed; inset: 0; background: #090d16; display: flex; align-items: center; justify-content: center; z-index: 200; }
     .auth-box { background: #1e293b; padding: 2rem; border-radius: 14px; text-align: center; max-width: 320px; width: 100%; border: 1px solid #334155; }
     .pin-input { font-size: 2rem; letter-spacing: 12px; text-align: center; width: 160px; padding: 8px; margin: 16px auto; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; display: block; }
     
@@ -896,7 +1005,7 @@ function getKitchenHTML() {
   </style>
 </head>
 <body>
-  <!-- PIN Code Security Gate -->
+  <!-- PIN Security Gate -->
   <div id="authModal">
     <div class="auth-box">
       <h2>🔒 Mutfak Girişi</h2>
@@ -912,7 +1021,6 @@ function getKitchenHTML() {
       <h2>🍳 Mutfak & Kasa:</h2>
       <select class="rest-select" id="restaurantSelector" onchange="switchRestaurant(this.value)"></select>
       
-      <!-- Store Status Toggle -->
       <div class="status-group">
         <button class="status-btn" id="btnOpen" onclick="setStoreStatus('OPEN')">🟢 Açık</button>
         <button class="status-btn" id="btnBusy" onclick="setStoreStatus('BUSY')">🟡 Yoğun</button>
@@ -920,7 +1028,8 @@ function getKitchenHTML() {
       </div>
     </div>
 
-    <div style="display:flex; gap:8px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="menu-btn" onclick="openMenuModal()">📋 Menüyü & IBAN Düzenle</button>
       <button class="z-btn" onclick="downloadZReport()">📊 Z-Raporu (.CSV)</button>
       <button class="sound-btn" id="audioToggle" onclick="initAudio()">🔔 Sesi Aç</button>
     </div>
@@ -944,7 +1053,7 @@ function getKitchenHTML() {
   </div>
 
   <div class="stock-bar">
-    <h4>🍲 Bu Dükkanın Hızlı Stok Kontrolü:</h4>
+    <h4>🍲 Hızlı Stok Durumu (Tıklayıp Değiştirin):</h4>
     <div class="stock-grid" id="stockContainer"></div>
   </div>
 
@@ -953,22 +1062,81 @@ function getKitchenHTML() {
   <!-- Hidden Print Container -->
   <div id="printContainer" class="print-area" style="display:none;"></div>
 
-  <script>
-    function esc(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
+  <!-- Modal 1: Menu & Store Management -->
+  <div class="modal-backdrop" id="menuModal">
+    <div class="modal-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h3 id="menuModalHeader">📋 Menü Yönetimi</h3>
+        <button onclick="closeModal('menuModal')" style="background:none; border:none; color:#94a3b8; font-size:1.5rem; cursor:pointer;">&times;</button>
+      </div>
 
+      <!-- Quick Store Settings Tab -->
+      <div style="background:#0f172a; padding:12px; border-radius:8px; margin-bottom:1rem; border:1px solid #334155;">
+        <h4 style="color:#f59e0b; margin-bottom:6px;">🏦 Dükkan & FAST/IBAN Bilgisi</h4>
+        <label style="font-size:0.8rem; color:#94a3b8;">Hesap Sahibi:</label>
+        <input type="text" id="storeAccountName" placeholder="Örn: Ahmet Usta - Döner">
+        <label style="font-size:0.8rem; color:#94a3b8;">IBAN:</label>
+        <input type="text" id="storeIban" placeholder="TR00 0000...">
+        <label style="font-size:0.8rem; color:#94a3b8;">Dükkan Açıklaması:</label>
+        <input type="text" id="storeDesc" placeholder="Örn: Hatay usulü lavaş...">
+        <button class="btn-action" style="background:#2563eb; padding:8px;" onclick="saveStoreSettings()">Kaydet (Dükkan Bilgileri)</button>
+      </div>
+
+      <!-- Item List Section -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h4>🍲 Menüdeki Ürünler:</h4>
+        <button class="btn-action" style="width:auto; padding:6px 12px; font-size:0.85rem;" onclick="openItemEditor(null)">➕ Yeni Ürün Ekle</button>
+      </div>
+      <div id="menuItemsList" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Add/Edit Item Form -->
+  <div class="modal-backdrop" id="itemFormModal">
+    <div class="modal-box">
+      <h3 id="itemFormTitle" style="margin-bottom:1rem;">Ürünü Düzenle</h3>
+      <input type="hidden" id="editItemId">
+      
+      <label style="font-size:0.85rem; color:#94a3b8;">Ürün Adı:</label>
+      <input type="text" id="editItemName" placeholder="Örn: Tavuk Döner Dürüm">
+
+      <label style="font-size:0.85rem; color:#94a3b8;">Fiyat (₺):</label>
+      <input type="number" id="editItemPrice" placeholder="Örn: 120">
+
+      <label style="font-size:0.85rem; color:#94a3b8;">Açıklama:</label>
+      <input type="text" id="editItemDesc" placeholder="Örn: Soslu, patatesli, turşulu">
+
+      <!-- Modifiers Quick Creator -->
+      <div style="background:#0f172a; padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid #334155;">
+        <label style="font-size:0.85rem; color:#93c5fd; font-weight:bold;">Porsiyon / Boyut Seçenekleri (Virgülle ayırın):</label>
+        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Standart:0, 1.5 Porsiyon:35)</p>
+        <input type="text" id="editItemPortions" placeholder="Standart Dürüm:0, 1.5 Porsiyon:35">
+
+        <label style="font-size:0.85rem; color:#93c5fd; font-weight:bold; margin-top:8px; display:block;">Ekstra Malzeme / Tercihler (Virgülle ayırın):</label>
+        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Soğansız:0, Ekstra Kaşar:25, Bol Soslu:0)</p>
+        <input type="text" id="editItemExtras" placeholder="Soğansız:0, Bol Soslu:0, Ekstra Kaşar:25">
+      </div>
+
+      <button class="btn-action" onclick="saveItemForm()">💾 Ürünü Kaydet</button>
+      <button style="width:100%; border:none; background:none; color:#94a3b8; margin-top:10px; cursor:pointer;" onclick="closeModal('itemFormModal')">İptal</button>
+    </div>
+  </div>
+
+  <script>
     let audioCtx = null;
     let hubData = {};
     let currentRestId = "donerci";
 
-    // Check saved PIN session
+    function esc(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     if (localStorage.getItem('kitchenAuth') === 'true') {
       document.getElementById('authModal').style.display = 'none';
     }
@@ -1021,7 +1189,7 @@ function getKitchenHTML() {
       
       const sel = document.getElementById('restaurantSelector');
       sel.innerHTML = Object.values(hubData).map(function(r) {
-        return '<option value="' + r.id + '">' + r.icon + ' ' + r.name + '</option>';
+        return '<option value="' + r.id + '">' + r.icon + ' ' + esc(r.name) + '</option>';
       }).join('');
       
       loadRestaurantDashboard();
@@ -1058,7 +1226,7 @@ function getKitchenHTML() {
           const btnClass = item.inStock ? 'in-stock' : 'out-stock';
           const label = item.inStock ? '🟢 Stokta' : '🔴 Tükendi';
           return '<div class="stock-item">' +
-            '<span>' + item.name + '</span>' +
+            '<span>' + esc(item.name) + '</span>' +
             '<button class="stock-toggle ' + btnClass + '" onclick="toggleStock(' + item.id + ')">' + label + '</button>' +
           '</div>';
         }).join('');
@@ -1094,6 +1262,164 @@ function getKitchenHTML() {
       loadRestaurantDashboard();
     }
 
+    /* --- MENU & PRICE EDITOR LOGIC --- */
+    function openMenuModal() {
+      const rest = hubData[currentRestId];
+      if (!rest) return;
+      document.getElementById('menuModalHeader').innerText = '📋 ' + rest.name + ' - Menü Düzenleme';
+      document.getElementById('storeAccountName').value = rest.accountName || '';
+      document.getElementById('storeIban').value = rest.iban || '';
+      document.getElementById('storeDesc').value = rest.desc || '';
+      renderMenuManagementList();
+      document.getElementById('menuModal').style.display = 'flex';
+    }
+
+    function renderMenuManagementList() {
+      const rest = hubData[currentRestId];
+      const list = document.getElementById('menuItemsList');
+      if (!rest.menu || rest.menu.length === 0) {
+        list.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">Menüde henüz ürün yok.</p>';
+        return;
+      }
+      list.innerHTML = rest.menu.map(item => {
+        return '<div class="menu-mgmt-row">' +
+          '<div>' +
+            '<strong>' + esc(item.name) + '</strong> &bull; <span style="color:#10b981; font-weight:bold;">' + item.price + ' ₺</span>' +
+            '<p style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">' + esc(item.desc || '') + '</p>' +
+          '</div>' +
+          '<div>' +
+            '<button class="btn-edit" onclick="openItemEditor(' + item.id + ')">✏️ Düzenle</button>' +
+            '<button class="btn-del" onclick="deleteMenuItem(' + item.id + ')">🗑️ Sil</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function openItemEditor(itemId) {
+      const rest = hubData[currentRestId];
+      if (itemId) {
+        const item = rest.menu.find(m => m.id === itemId);
+        document.getElementById('itemFormTitle').innerText = 'Ürünü Düzenle: ' + item.name;
+        document.getElementById('editItemId').value = item.id;
+        document.getElementById('editItemName').value = item.name;
+        document.getElementById('editItemPrice').value = item.price;
+        document.getElementById('editItemDesc').value = item.desc || '';
+        
+        // Populate options string
+        let portionsStr = '';
+        let extrasStr = '';
+        if (item.options) {
+          const radioGroup = item.options.find(o => o.type === 'radio');
+          if (radioGroup) portionsStr = radioGroup.choices.map(c => c.name + ':' + c.price).join(', ');
+          const checkGroup = item.options.find(o => o.type === 'checkbox');
+          if (checkGroup) extrasStr = checkGroup.choices.map(c => c.name + ':' + c.price).join(', ');
+        }
+        document.getElementById('editItemPortions').value = portionsStr;
+        document.getElementById('editItemExtras').value = extrasStr;
+      } else {
+        document.getElementById('itemFormTitle').innerText = '➕ Yeni Ürün Ekle';
+        document.getElementById('editItemId').value = '';
+        document.getElementById('editItemName').value = '';
+        document.getElementById('editItemPrice').value = '';
+        document.getElementById('editItemDesc').value = '';
+        document.getElementById('editItemPortions').value = '';
+        document.getElementById('editItemExtras').value = '';
+      }
+      document.getElementById('itemFormModal').style.display = 'flex';
+    }
+
+    async function saveItemForm() {
+      const id = document.getElementById('editItemId').value;
+      const name = document.getElementById('editItemName').value.trim();
+      const price = parseFloat(document.getElementById('editItemPrice').value);
+      const desc = document.getElementById('editItemDesc').value.trim();
+      const portionsRaw = document.getElementById('editItemPortions').value.trim();
+      const extrasRaw = document.getElementById('editItemExtras').value.trim();
+
+      if (!name || isNaN(price)) return alert('Lütfen ürün adı ve geçerli bir fiyat girin!');
+
+      // Build options array
+      const options = [];
+      if (portionsRaw) {
+        const choices = portionsRaw.split(',').map(s => {
+          const parts = s.split(':');
+          return { name: parts[0].trim(), price: parseFloat(parts[1]) || 0 };
+        }).filter(c => c.name);
+        if (choices.length > 0) {
+          options.push({ name: "Porsiyon Seçimi", type: "radio", required: true, choices: choices });
+        }
+      }
+      if (extrasRaw) {
+        const choices = extrasRaw.split(',').map(s => {
+          const parts = s.split(':');
+          return { name: parts[0].trim(), price: parseFloat(parts[1]) || 0 };
+        }).filter(c => c.name);
+        if (choices.length > 0) {
+          options.push({ name: "Malzeme & Tercihler", type: "checkbox", choices: choices });
+        }
+      }
+
+      const itemPayload = {
+        id: id ? parseInt(id) || id : undefined,
+        name: name,
+        price: price,
+        desc: desc,
+        options: options
+      };
+
+      const res = await fetch('/api/kitchen/menu/item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: currentRestId, item: itemPayload })
+      });
+      const data = await res.json();
+      if (data.success) {
+        hubData = data.hub;
+        closeModal('itemFormModal');
+        renderMenuManagementList();
+        loadRestaurantDashboard();
+      } else {
+        alert(data.error || 'Hata oluştu!');
+      }
+    }
+
+    async function deleteMenuItem(itemId) {
+      if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
+      const res = await fetch('/api/kitchen/menu/item/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: currentRestId, itemId: itemId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        hubData = data.hub;
+        renderMenuManagementList();
+        loadRestaurantDashboard();
+      }
+    }
+
+    async function saveStoreSettings() {
+      const desc = document.getElementById('storeDesc').value.trim();
+      const iban = document.getElementById('storeIban').value.trim();
+      const accountName = document.getElementById('storeAccountName').value.trim();
+
+      const res = await fetch('/api/kitchen/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: currentRestId, desc, iban, accountName })
+      });
+      const data = await res.json();
+      if (data.success) {
+        hubData = data.hub;
+        alert('Dükkan bilgileri ve IBAN başarıyla güncellendi!');
+      }
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    /* --- ORDERS & SSE --- */
     const evtSource = new EventSource('/api/stream');
     evtSource.onmessage = function(event) {
       const msg = JSON.parse(event.data);
