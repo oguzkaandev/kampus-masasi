@@ -1115,29 +1115,44 @@ function getKitchenHTML() {
     };
 
     function renderCard(order) {
-  if (document.getElementById('order-' + order.id)) return;
-  const card = document.createElement('div');
-  card.id = 'order-' + order.id;
-  card.className = 'order-card ' + order.status.toLowerCase();
-  const itemsList = order.items.map(function(i) { return '<li>' + esc(i.name) + ' (' + i.price + ' TL)</li>'; }).join('');
-  
-  card.innerHTML =
-    '<div style="display:flex; justify-content:space-between;">' +
-      '<h3>#' + order.id + '</h3>' +
-      '<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.75rem;">' + esc(order.time) + '</span>' +
-    '</div>' +
-    '<p style="margin:6px 0;"><strong>' + esc(order.customer) + '</strong></p>' +
-    '<p style="color:#94a3b8; font-size:0.85rem;">' + esc(order.type) + ' | ' + esc(order.payment) + '</p>' +
-    '<ul style="margin:8px 0 8px 18px;">' + itemsList + '</ul>' +
-    '<h2 style="color:#10b981; margin-bottom:8px;">' + order.total + ' ₺</h2>' +
-    '<div class="actions">' +
-      '<button class="btn-prep" onclick="promptPrepTime(' + order.id + ')">🔥 Hazırla</button>' +
-      '<button class="btn-ready" onclick="setStatus(' + order.id + ', \\'HAZIR\\')">✅ Hazır</button>' +
-      '<button class="btn-done" onclick="setStatus(' + order.id + ', \\'TAMAMLANDI\\')">📦 Bitti</button>' +
-      '<button class="btn-print" onclick="printReceipt(' + JSON.stringify(order).replace(/"/g, '&quot;') + ')">🖨️</button>' +
-    '</div>';
-  document.getElementById('ordersGrid').prepend(card);
-}
+      if (document.getElementById('order-' + order.id)) return;
+      const card = document.createElement('div');
+      card.id = 'order-' + order.id;
+      card.className = 'order-card ' + order.status.toLowerCase();
+      
+      const itemsList = order.items.map(function(i) {
+        let optHtml = '';
+        if (i.selectedOptions && i.selectedOptions.length > 0) {
+          optHtml = '<div style="font-size:0.8rem; color:#93c5fd; margin: 3px 0 3px 10px; line-height: 1.4;">' +
+            i.selectedOptions.map(o => '• <b>' + esc(o.name) + '</b>' + (o.price > 0 ? ' <span style="color:#6ee7b7;">(+' + o.price + ' TL)</span>' : '')).join('<br>') +
+          '</div>';
+        }
+        let noteHtml = i.itemNote ? '<div style="font-size:0.75rem; color:#fde047; margin: 3px 0 3px 10px; font-style:italic;">📝 ' + esc(i.itemNote) + '</div>' : '';
+        
+        return '<li style="margin-bottom:8px;">' +
+          '<strong>' + esc(i.name) + '</strong> <span style="color:#94a3b8;">(' + i.price + ' TL)</span>' +
+          optHtml + 
+          noteHtml + 
+        '</li>';
+      }).join('');
+      
+      card.innerHTML =
+        '<div style="display:flex; justify-content:space-between;">' +
+          '<h3>#' + order.id + '</h3>' +
+          '<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.75rem;">' + esc(order.time) + '</span>' +
+        '</div>' +
+        '<p style="margin:6px 0;"><strong>' + esc(order.customer) + '</strong></p>' +
+        '<p style="color:#94a3b8; font-size:0.85rem;">' + esc(order.type) + ' | ' + esc(order.payment) + '</p>' +
+        '<ul style="margin:8px 0 8px 18px;">' + itemsList + '</ul>' +
+        '<h2 style="color:#10b981; margin-bottom:8px;">' + order.total + ' ₺</h2>' +
+        '<div class="actions">' +
+          '<button class="btn-prep" onclick="promptPrepTime(' + order.id + ')">🔥 Hazırla</button>' +
+          '<button class="btn-ready" onclick="setStatus(' + order.id + ', \\'HAZIR\\')">✅ Hazır</button>' +
+          '<button class="btn-done" onclick="setStatus(' + order.id + ', \\'TAMAMLANDI\\')">📦 Bitti</button>' +
+          '<button class="btn-print" onclick="printReceipt(' + JSON.stringify(order).replace(/"/g, '&quot;') + ')">🖨️</button>' +
+        '</div>';
+      document.getElementById('ordersGrid').prepend(card);
+    }
 
     async function promptPrepTime(orderId) {
       const minutes = prompt("Kaç dakikaya hazır olur? (Örn: 15)", "15");
