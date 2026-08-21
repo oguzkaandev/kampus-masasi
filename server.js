@@ -82,6 +82,29 @@ let hub = loadHub();
 let orders = loadOrders();
 let clients = [];
 
+// --- Add this helper around Line 86 ---
+function parseJsonBody(req, res, callback) {
+  let body = '';
+  const MAX_SIZE = 1024 * 1024; // 1 MB limit
+  req.on('data', chunk => {
+    body += chunk;
+    if (body.length > MAX_SIZE) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Payload too large' }));
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    try {
+      const data = body ? JSON.parse(body) : {};
+      callback(data);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Geçersiz JSON verisi!' }));
+    }
+  });
+}
+
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
@@ -113,38 +136,31 @@ const server = http.createServer((req, res) => {
 
   // 3. API: Kitchen Auth / Verify PIN
   if (pathname === '/api/kitchen/auth' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      const { restaurantId, pin } = JSON.parse(body);
-      const rest = hub[restaurantId];
-      if (rest && rest.pin === pin) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } else {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: 'Hatalı PIN Kodu!' }));
-      }
-    });
-    return;
-  }
-
+  parseJsonBody(req, res, ({ restaurantId, pin }) => {
+    const rest = hub[restaurantId];
+    if (rest && rest.pin === pin) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    } else {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, message: 'Hatalı PIN Kodu!' }));
+    }
+  });
+  return;
+}
   // 4. API: Change Restaurant Operating Status (Open/Busy/Closed)
   if (pathname === '/api/kitchen/store-status' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      const { restaurantId, status } = JSON.parse(body);
-      if (hub[restaurantId]) {
-        hub[restaurantId].status = status;
-        saveHub(hub);
-        broadcast({ event: 'HUB_UPDATE', data: hub });
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, status }));
-    });
-    return;
-  }
+  parseJsonBody(req, res, ({ restaurantId, status }) => {
+    if (hub[restaurantId]) {
+      hub[restaurantId].status = status;
+      saveHub(hub);
+      broadcast({ event: 'HUB_UPDATE', data: hub });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, status }));
+  });
+  return;
+}
 
   // 5. API: Active Orders
   if (pathname === '/api/orders/active' && req.method === 'GET') {
@@ -179,8 +195,9 @@ const server = http.createServer((req, res) => {
     csv += 'Sipariş No;Tarih;Saat;Müşteri;Teslimat;Ödeme;Ürünler;Tutar (TL)\n';
     
     restOrders.forEach(o => {
-      const itemsSummary = o.items.map(i => `${i.name} (${i.price} TL)`).join(', ');
-      csv += `"${o.id}";"${o.date}";"${o.time}";"${o.customer}";"${o.type}";"${o.payment}";"${itemsSummary}";"${o.total}"\n`;
+      const safeCustomer = String(o.customer || '').replace(/^([=+\-@\t\r])/, "'$1").replace(/"/g, '""');
+      const itemsSummary = o.items.map(i => `${i.name} (${i.price} TL)`).join(', ').replace(/"/g, '""');
+      csv += `"${o.id}";"${o.date}";"${o.time}";"${safeCustomer}";"${o.type}";"${o.payment}";"${itemsSummary}";"${o.total}"\n`;
     });
 
     const totalRev = restOrders.reduce((s, o) => s + (o.total || 0), 0);
@@ -197,47 +214,56 @@ const server = http.createServer((req, res) => {
 
   // 8. API: Toggle Item Stock
   if (pathname === '/api/menu/toggle-stock' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      const { restaurantId, itemId } = JSON.parse(body);
-      const rest = hub[restaurantId];
-      if (rest) {
-        const item = rest.menu.find(i => i.id === itemId);
-        if (item) {
-          item.inStock = !item.inStock;
-          saveHub(hub);
-          broadcast({ event: 'HUB_UPDATE', data: hub });
-        }
+  parseJsonBody(req, res, ({ restaurantId, itemId }) => {
+    const rest = hub[restaurantId];
+    if (rest) {
+      const item = rest.menu.find(i => i.id === itemId);
+      if (item) {
+        item.inStock = !item.inStock;
+        saveHub(hub);
+        broadcast({ event: 'HUB_UPDATE', data: hub });
       }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, hub }));
-    });
-    return;
-  }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, hub }));
+  });
+  return;
+}
 
   // 9. API: Place Order
+  // 9. API: Place Order
   if (pathname === '/api/order' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      const order = JSON.parse(body);
+    parseJsonBody(req, res, (order) => {
       const rest = hub[order.restaurantId];
-      if (rest && rest.status === 'CLOSED') {
+      if (!rest || rest.status === 'CLOSED') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Dükkan şu anda kapalıdır.' }));
       }
 
+      // Re-verify items and recompute total from server DB
+      const verifiedItems = [];
+      let calculatedTotal = 0;
+      for (const clientItem of (order.items || [])) {
+        const menuItem = rest.menu.find(m => m.id === clientItem.id && m.inStock);
+        if (!menuItem) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: 'Stokta bulunmayan veya geçersiz ürün tespit edildi.' }));
+        }
+        verifiedItems.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price });
+        calculatedTotal += menuItem.price;
+      }
+
       order.id = Math.floor(1000 + Math.random() * 9000);
+      order.items = verifiedItems;
+      order.total = calculatedTotal;
       order.status = 'BEKLIYOR';
       order.prepMinutes = 15;
       order.readyAt = null;
-      order.date = new Date().toLocaleDateString('tr-TR');
-      order.time = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-      
+      order.date = new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' });
+      order.time = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+
       orders.unshift(order);
       saveOrders(orders);
-
       broadcast({ event: 'NEW_ORDER', data: order });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -248,37 +274,34 @@ const server = http.createServer((req, res) => {
 
   // 10. API: Update Status & Preparation Timer
   if (pathname === '/api/order/status' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      const { orderId, status, prepMinutes } = JSON.parse(body);
-      const target = orders.find(o => o.id === orderId);
-      if (target) {
-        target.status = status;
-        if (status === 'HAZIRLANIYOR' && prepMinutes) {
-          target.prepMinutes = prepMinutes;
-          target.readyAt = Date.now() + prepMinutes * 60000;
-        }
-        if (status === 'HAZIR' || status === 'TAMAMLANDI') {
-          target.readyAt = null;
-        }
-        saveOrders(orders);
-        broadcast({ 
-          event: 'STATUS_CHANGE', 
-          data: { 
-            id: orderId, 
-            status: status, 
-            restaurantId: target.restaurantId,
-            readyAt: target.readyAt,
-            prepMinutes: target.prepMinutes 
-          } 
-        });
+  parseJsonBody(req, res, ({ orderId, status, prepMinutes }) => {
+    const target = orders.find(o => o.id === orderId);
+    if (target) {
+      target.status = status;
+      if (status === 'HAZIRLANIYOR' && prepMinutes) {
+        target.prepMinutes = prepMinutes;
+        target.readyAt = Date.now() + prepMinutes * 60000;
       }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-    });
-    return;
-  }
+      if (status === 'HAZIR' || status === 'TAMAMLANDI') {
+        target.readyAt = null;
+      }
+      saveOrders(orders);
+      broadcast({ 
+        event: 'STATUS_CHANGE', 
+        data: { 
+          id: orderId, 
+          status: status, 
+          restaurantId: target.restaurantId,
+          readyAt: target.readyAt,
+          prepMinutes: target.prepMinutes 
+        } 
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true }));
+  });
+  return;
+}
 
   // 11. Kitchen POS Screen
   if (pathname === '/kitchen') {
@@ -294,7 +317,16 @@ const server = http.createServer((req, res) => {
 
 function broadcast(payload) {
   const msg = `data: ${JSON.stringify(payload)}\n\n`;
-  clients.forEach(c => c.write(msg));
+  // Filter out any dead/dropped connections safely without throwing errors
+  clients = clients.filter(c => {
+    try {
+      if (c.writable) {
+        c.write(msg);
+        return true;
+      }
+    } catch (err) {}
+    return false;
+  });
 }
 
 function getStudentHubHTML() {
@@ -746,6 +778,16 @@ function getKitchenHTML() {
   <div id="printContainer" class="print-area" style="display:none;"></div>
 
   <script>
+    function esc(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     let audioCtx = null;
     let hubData = {};
     let currentRestId = "donerci";
@@ -895,29 +937,29 @@ function getKitchenHTML() {
     };
 
     function renderCard(order) {
-      if (document.getElementById('order-' + order.id)) return;
-      const card = document.createElement('div');
-      card.id = 'order-' + order.id;
-      card.className = 'order-card ' + order.status.toLowerCase();
-      const itemsList = order.items.map(function(i) { return '<li>' + i.name + ' (' + i.price + ' TL)</li>'; }).join('');
-      
-      card.innerHTML =
-        '<div style="display:flex; justify-content:space-between;">' +
-          '<h3>#' + order.id + '</h3>' +
-          '<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.75rem;">' + order.time + '</span>' +
-        '</div>' +
-        '<p style="margin:6px 0;"><strong>' + order.customer + '</strong></p>' +
-        '<p style="color:#94a3b8; font-size:0.85rem;">' + order.type + ' | ' + order.payment + '</p>' +
-        '<ul style="margin:8px 0 8px 18px;">' + itemsList + '</ul>' +
-        '<h2 style="color:#10b981; margin-bottom:8px;">' + order.total + ' ₺</h2>' +
-        '<div class="actions">' +
-          '<button class="btn-prep" onclick="promptPrepTime(' + order.id + ')">🔥 Hazırla</button>' +
-          '<button class="btn-ready" onclick="setStatus(' + order.id + ', \\'HAZIR\\')">✅ Hazır</button>' +
-          '<button class="btn-done" onclick="setStatus(' + order.id + ', \\'TAMAMLANDI\\')">📦 Bitti</button>' +
-          '<button class="btn-print" onclick="printReceipt(' + JSON.stringify(order).replace(/"/g, '&quot;') + ')">🖨️</button>' +
-        '</div>';
-      document.getElementById('ordersGrid').prepend(card);
-    }
+  if (document.getElementById('order-' + order.id)) return;
+  const card = document.createElement('div');
+  card.id = 'order-' + order.id;
+  card.className = 'order-card ' + order.status.toLowerCase();
+  const itemsList = order.items.map(function(i) { return '<li>' + esc(i.name) + ' (' + i.price + ' TL)</li>'; }).join('');
+  
+  card.innerHTML =
+    '<div style="display:flex; justify-content:space-between;">' +
+      '<h3>#' + order.id + '</h3>' +
+      '<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.75rem;">' + esc(order.time) + '</span>' +
+    '</div>' +
+    '<p style="margin:6px 0;"><strong>' + esc(order.customer) + '</strong></p>' +
+    '<p style="color:#94a3b8; font-size:0.85rem;">' + esc(order.type) + ' | ' + esc(order.payment) + '</p>' +
+    '<ul style="margin:8px 0 8px 18px;">' + itemsList + '</ul>' +
+    '<h2 style="color:#10b981; margin-bottom:8px;">' + order.total + ' ₺</h2>' +
+    '<div class="actions">' +
+      '<button class="btn-prep" onclick="promptPrepTime(' + order.id + ')">🔥 Hazırla</button>' +
+      '<button class="btn-ready" onclick="setStatus(' + order.id + ', \\'HAZIR\\')">✅ Hazır</button>' +
+      '<button class="btn-done" onclick="setStatus(' + order.id + ', \\'TAMAMLANDI\\')">📦 Bitti</button>' +
+      '<button class="btn-print" onclick="printReceipt(' + JSON.stringify(order).replace(/"/g, '&quot;') + ')">🖨️</button>' +
+    '</div>';
+  document.getElementById('ordersGrid').prepend(card);
+}
 
     async function promptPrepTime(orderId) {
       const minutes = prompt("Kaç dakikaya hazır olur? (Örn: 15)", "15");
@@ -938,26 +980,26 @@ function getKitchenHTML() {
     }
 
     function printReceipt(order) {
-      const p = document.getElementById('printContainer');
-      p.style.display = 'block';
-      p.innerHTML = 
-        '================================<br>' +
-        '       KAMPÜS MASASI FİŞİ       <br>' +
-        '================================<br>' +
-        'Sipariş No: #' + order.id + '<br>' +
-        'Tarih: ' + order.date + ' ' + order.time + '<br>' +
-        'Müşteri: ' + order.customer + '<br>' +
-        'Teslimat: ' + order.type + '<br>' +
-        'Ödeme: ' + order.payment + '<br>' +
-        '--------------------------------<br>' +
-        order.items.map(function(i) { return i.name + ' - ' + i.price + ' TL<br>'; }).join('') +
-        '--------------------------------<br>' +
-        'TOPLAM TUTAR: ' + order.total + ' TL<br>' +
-        '================================<br>' +
-        '  Afiyet Olsun! (0% Komisyon)   <br>';
-      window.print();
-      p.style.display = 'none';
-    }
+  const p = document.getElementById('printContainer');
+  p.style.display = 'block';
+  p.innerHTML = 
+    '================================<br>' +
+    '       KAMPÜS MASASI FİŞİ       <br>' +
+    '================================<br>' +
+    'Sipariş No: #' + order.id + '<br>' +
+    'Tarih: ' + esc(order.date) + ' ' + esc(order.time) + '<br>' +
+    'Müşteri: ' + esc(order.customer) + '<br>' +
+    'Teslimat: ' + esc(order.type) + '<br>' +
+    'Ödeme: ' + esc(order.payment) + '<br>' +
+    '--------------------------------<br>' +
+    order.items.map(function(i) { return esc(i.name) + ' - ' + i.price + ' TL<br>'; }).join('') +
+    '--------------------------------<br>' +
+    'TOPLAM TUTAR: ' + order.total + ' TL<br>' +
+    '================================<br>' +
+    '  Afiyet Olsun! (0% Komisyon)   <br>';
+  window.print();
+  p.style.display = 'none';
+}
 
     function updateCardUI(id, status) {
       const card = document.getElementById('order-' + id);
