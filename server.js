@@ -237,8 +237,7 @@ const server = http.createServer((req, res) => {
   return;
 }
 
-  // 9. API: Place Order
-  // 9. API: Place Order
+  // 9. API: Place Order (With Server-Side Modifier & Price Validation)
   if (pathname === '/api/order' && req.method === 'POST') {
     parseJsonBody(req, res, (order) => {
       const rest = hub[order.restaurantId];
@@ -247,17 +246,51 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ error: 'Dükkan şu anda kapalıdır.' }));
       }
 
-      // Re-verify items and recompute total from server DB
       const verifiedItems = [];
       let calculatedTotal = 0;
+
       for (const clientItem of (order.items || [])) {
         const menuItem = rest.menu.find(m => m.id === clientItem.id && m.inStock);
         if (!menuItem) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Stokta bulunmayan veya geçersiz ürün tespit edildi.' }));
         }
-        verifiedItems.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price });
-        calculatedTotal += menuItem.price;
+
+        let itemPrice = menuItem.price;
+        const verifiedOptions = [];
+
+        // Validate modifiers against menu
+        if (menuItem.options && Array.isArray(menuItem.options)) {
+          const clientSelected = clientItem.selectedOptions || [];
+          for (const group of menuItem.options) {
+            for (const choice of group.choices) {
+              const isSelected = clientSelected.some(cs => cs.group === group.name && cs.name === choice.name);
+              if (isSelected) {
+                itemPrice += (choice.price || 0);
+                verifiedOptions.push({
+                  group: group.name,
+                  name: choice.name,
+                  price: choice.price || 0
+                });
+              }
+            }
+          }
+        }
+
+        calculatedTotal += itemPrice;
+        verifiedItems.push({
+          id: menuItem.id,
+          name: menuItem.name,
+          basePrice: menuItem.price,
+          price: itemPrice,
+          selectedOptions: verifiedOptions,
+          itemNote: typeof clientItem.itemNote === 'string' ? clientItem.itemNote.slice(0, 150) : ''
+        });
+      }
+
+      if (verifiedItems.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Sepetiniz boş!' }));
       }
 
       order.id = Math.floor(1000 + Math.random() * 9000);
@@ -345,7 +378,7 @@ function getStudentHubHTML() {
   <title>Kampüs Masası</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #f1f5f9; color: #0f172a; padding-bottom: 100px; }
+    body { background: #f1f5f9; color: #0f172a; padding-bottom: 110px; }
     header { background: #0f172a; color: white; padding: 1.2rem; text-align: center; }
     .badge { background: #10b981; color: white; padding: 4px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: bold; }
     .container { max-width: 500px; margin: auto; padding: 1rem; }
@@ -371,15 +404,26 @@ function getStudentHubHTML() {
     .banner-warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 0.85rem; color: #92400e; font-weight: 500; }
     .banner-closed { background: #fee2e2; border-left: 4px solid #ef4444; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 0.85rem; color: #991b1b; font-weight: bold; }
 
-    .cart-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 1rem; border-top: 1px solid #e2e8f0; }
+    .cart-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 1rem; border-top: 1px solid #e2e8f0; z-index: 30; }
     .cart-btn { background: #059669; color: white; width: 100%; max-width: 500px; margin: auto; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; }
     
-    #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
-    .modal-content { background: white; border-radius: 16px; max-width: 450px; width: 100%; padding: 1.5rem; }
-    input, select { width: 100%; padding: 10px; margin: 6px 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
+    /* Modals */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
+    .modal-content { background: white; border-radius: 16px; max-width: 450px; width: 100%; padding: 1.5rem; max-height: 90vh; overflow-y: auto; }
+    input, select, textarea { width: 100%; padding: 10px; margin: 6px 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
     .iban-box { background: #fef3c7; border: 1px dashed #d97706; padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+
+    /* Customizer Option Groups */
+    .opt-group { margin-bottom: 14px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
+    .opt-title { font-size: 0.9rem; font-weight: bold; color: #334155; margin-bottom: 6px; }
+    .opt-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 0.9rem; cursor: pointer; }
+    .opt-row input { width: auto; margin: 0 8px 0 0; cursor: pointer; }
     
-    /* Ticket Card */
+    /* Cart Breakdown List */
+    .cart-item-row { border-bottom: 1px solid #f1f5f9; padding: 8px 0; font-size: 0.9rem; }
+    .cart-item-mods { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+    
+    /* Tracker */
     #tracker { display: none; background: white; border-radius: 14px; padding: 1.2rem; border-left: 6px solid #2563eb; margin-bottom: 1.2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
     .countdown-box { background: #eff6ff; color: #1d4ed8; padding: 8px 12px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; margin-top: 8px; display: inline-block; }
   </style>
@@ -418,17 +462,39 @@ function getStudentHubHTML() {
     </div>
   </div>
 
+  <!-- Cart Bottom Bar -->
   <div class="cart-bar" id="cartBar" style="display:none;">
     <button class="cart-btn" id="checkoutBtn" onclick="openCheckout()">
       <span id="cartCount">0 Ürün</span>
-      <span>Siparişi Tamamla (<span id="cartTotal">0</span> ₺)</span>
+      <span>Siparişi Onayla (<span id="cartTotal">0</span> ₺)</span>
     </button>
   </div>
 
-  <div id="modal">
+  <!-- Modal 1: Item Customizer (Modifiers) -->
+  <div class="modal-overlay" id="customizerModal">
+    <div class="modal-content">
+      <h3 id="customizerTitle" style="color:#0f172a;">Ürünü Özelleştir</h3>
+      <p id="customizerDesc" style="color:#64748b; font-size:0.85rem; margin-bottom:12px;"></p>
+      <div id="customizerOptions"></div>
+      
+      <label style="font-size:0.85rem; font-weight:bold; color:#334155;">Ürün Notu (İsteğe Bağlı):</label>
+      <input type="text" id="customizerItemNote" placeholder="Örn: Acı sosu fazla olsun...">
+
+      <button class="cart-btn" style="background:#2563eb; width:100%; justify-content:center;" onclick="confirmAddToCart()">
+        <span id="customizerAddBtnText">Sepete Ekle</span>
+      </button>
+      <button style="width:100%; border:none; background:none; color:#64748b; margin-top:10px; cursor:pointer;" onclick="closeCustomizer()">Kapat</button>
+    </div>
+  </div>
+
+  <!-- Modal 2: Final Checkout -->
+  <div class="modal-overlay" id="checkoutModal">
     <div class="modal-content">
       <h3 id="modalRestTitle">Siparişi Onayla</h3>
       <div class="iban-box" id="modalIbanBox"></div>
+
+      <div style="margin-bottom:12px; max-height:120px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;" id="checkoutSummaryList"></div>
+
       <label>İsim / Oda / Tel:</label>
       <input type="text" id="custName" placeholder="Örn: Ali - KYK 3. Blok No:402">
       <label>Teslimat Türü:</label>
@@ -452,6 +518,12 @@ function getStudentHubHTML() {
     let cart = [];
     let activeTicket = JSON.parse(localStorage.getItem('activeTicket') || 'null');
     let timerInterval = null;
+    let pendingItem = null; // Item currently being customized
+
+    function esc(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
 
     async function init() {
       const res = await fetch('/api/hub');
@@ -472,8 +544,8 @@ function getStudentHubHTML() {
           '<div class="rest-header">' +
             '<span class="rest-icon">' + r.icon + '</span>' +
             '<div>' +
-              '<h3>' + r.name + '</h3>' +
-              '<p style="color:#64748b; font-size:0.85rem; margin-top:2px;">' + r.desc + '</p>' +
+              '<h3>' + esc(r.name) + '</h3>' +
+              '<p style="color:#64748b; font-size:0.85rem; margin-top:2px;">' + esc(r.desc) + '</p>' +
               statusBadge +
             '</div>' +
           '</div>' +
@@ -489,13 +561,13 @@ function getStudentHubHTML() {
       document.getElementById('selectedRestHeader').innerHTML =
         '<div style="display:flex; align-items:center; gap:10px;">' +
           '<span style="font-size:2rem;">' + activeRestaurant.icon + '</span>' +
-          '<div><h2>' + activeRestaurant.name + '</h2><p style="color:#64748b; font-size:0.85rem;">' + activeRestaurant.desc + '</p></div>' +
+          '<div><h2>' + esc(activeRestaurant.name) + '</h2><p style="color:#64748b; font-size:0.85rem;">' + esc(activeRestaurant.desc) + '</p></div>' +
         '</div>';
 
       const banner = document.getElementById('storeAlertBanner');
       banner.innerHTML = '';
       if (activeRestaurant.status === 'BUSY') {
-        banner.innerHTML = '<div class="banner-warning">⚠️ Dükkan şu an çok yoğun. Siparişlerin hazırlanması 15-20 dk uzayabilir.</div>';
+        banner.innerHTML = '<div class="banner-warning">⚠️ Dükkan şu an çok yoğun. Hazırlık süresi uzayabilir.</div>';
       } else if (activeRestaurant.status === 'CLOSED') {
         banner.innerHTML = '<div class="banner-closed">🔴 DÜKKAN ŞU AN KAPALIDIR. Yeni sipariş alınmamaktadır.</div>';
       }
@@ -519,49 +591,115 @@ function getStudentHubHTML() {
       cont.innerHTML = activeRestaurant.menu.map(function(item) {
         const canAdd = item.inStock && !isClosed;
         const stockClass = canAdd ? '' : 'out-of-stock';
-        let btn = '<button class="add" onclick="addToCart(' + item.id + ', \\'' + item.name + '\\', ' + item.price + ')">+ Ekle</button>';
+        let btn = '<button class="add" onclick="handleItemClick(' + item.id + ')">+ Ekle</button>';
         
         if (!item.inStock) btn = '<button class="add disabled" disabled>Tükendi</button>';
         if (isClosed) btn = '<button class="add disabled" disabled>Kapalı</button>';
 
         return '<div class="card ' + stockClass + '">' +
-          '<div><h3>' + item.name + (!item.inStock ? ' <span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>' : '') + '</h3>' +
-          '<p style="color:#64748b; font-size:0.85rem;">' + item.desc + '</p>' +
+          '<div><h3>' + esc(item.name) + (!item.inStock ? ' <span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>' : '') + '</h3>' +
+          '<p style="color:#64748b; font-size:0.85rem;">' + esc(item.desc) + '</p>' +
           '<div class="price">' + item.price + ' ₺</div></div>' +
           btn + '</div>';
       }).join('');
     }
 
-    const stream = new EventSource('/api/stream');
-    stream.onmessage = function(e) {
-      const payload = JSON.parse(e.data);
-      if (payload.event === 'HUB_UPDATE') {
-        hubData = payload.data;
-        renderDirectory();
-        if (activeRestaurant) {
-          activeRestaurant = hubData[activeRestaurant.id];
-          openRestaurant(activeRestaurant.id);
-        }
-      } else if (payload.event === 'STATUS_CHANGE') {
-        if (activeTicket && payload.data.id === activeTicket.id) {
-          activeTicket.status = payload.data.status;
-          activeTicket.readyAt = payload.data.readyAt;
-          localStorage.setItem('activeTicket', JSON.stringify(activeTicket));
-          renderActiveTicketUI();
-        }
-      }
-    };
+    // Opens Customizer if item has options, else adds directly
+    function handleItemClick(itemId) {
+      const item = activeRestaurant.menu.find(i => i.id === itemId);
+      if (!item) return;
 
-    function addToCart(id, name, price) {
-      cart.push({ id: id, name: name, price: price });
+      if (item.options && item.options.length > 0) {
+        pendingItem = item;
+        document.getElementById('customizerTitle').innerText = item.name;
+        document.getElementById('customizerDesc').innerText = item.desc;
+        document.getElementById('customizerItemNote').value = '';
+        
+        let optHtml = '';
+        item.options.forEach((group, gIdx) => {
+          optHtml += '<div class="opt-group"><div class="opt-title">' + esc(group.name) + '</div>';
+          group.choices.forEach((choice, cIdx) => {
+            const inputType = group.type === 'radio' ? 'radio' : 'checkbox';
+            const inputName = 'opt_group_' + gIdx;
+            const isChecked = (group.type === 'radio' && cIdx === 0) ? 'checked' : '';
+            const priceTag = choice.price > 0 ? '(+' + choice.price + ' ₺)' : '';
+            
+            optHtml += '<label class="opt-row">' +
+              '<span><input type="' + inputType + '" name="' + inputName + '" value="' + cIdx + '" data-group="' + esc(group.name) + '" data-name="' + esc(choice.name) + '" data-price="' + choice.price + '" ' + isChecked + ' onchange="updateCustomizerPrice()"> ' + esc(choice.name) + '</span>' +
+              '<span style="color:#059669; font-weight:bold;">' + priceTag + '</span>' +
+            '</label>';
+          });
+          optHtml += '</div>';
+        });
+
+        document.getElementById('customizerOptions').innerHTML = optHtml;
+        updateCustomizerPrice();
+        document.getElementById('customizerModal').style.display = 'flex';
+      } else {
+        // Direct add without customization
+        cart.push({
+          id: item.id,
+          name: item.name,
+          basePrice: item.price,
+          price: item.price,
+          selectedOptions: [],
+          itemNote: ''
+        });
+        updateCartUI();
+      }
+    }
+
+    function updateCustomizerPrice() {
+      if (!pendingItem) return;
+      let total = pendingItem.price;
+      const inputs = document.querySelectorAll('#customizerOptions input:checked');
+      inputs.forEach(inp => {
+        total += parseFloat(inp.getAttribute('data-price') || 0);
+      });
+      document.getElementById('customizerAddBtnText').innerText = 'Sepete Ekle • ' + total + ' ₺';
+    }
+
+    function confirmAddToCart() {
+      if (!pendingItem) return;
+      const selectedOptions = [];
+      let finalPrice = pendingItem.price;
+      
+      const checkedInputs = document.querySelectorAll('#customizerOptions input:checked');
+      checkedInputs.forEach(inp => {
+        const p = parseFloat(inp.getAttribute('data-price') || 0);
+        finalPrice += p;
+        selectedOptions.push({
+          group: inp.getAttribute('data-group'),
+          name: inp.getAttribute('data-name'),
+          price: p
+        });
+      });
+
+      cart.push({
+        id: pendingItem.id,
+        name: pendingItem.name,
+        basePrice: pendingItem.price,
+        price: finalPrice,
+        selectedOptions: selectedOptions,
+        itemNote: document.getElementById('customizerItemNote').value.trim()
+      });
+
+      closeCustomizer();
       updateCartUI();
     }
+
+    function closeCustomizer() {
+      pendingItem = null;
+      document.getElementById('customizerModal').style.display = 'none';
+    }
+
     function updateCartUI() {
       const bar = document.getElementById('cartBar');
       if (cart.length > 0 && activeRestaurant && activeRestaurant.status !== 'CLOSED') {
         bar.style.display = 'block';
         document.getElementById('cartCount').innerText = cart.length + ' Ürün';
-        document.getElementById('cartTotal').innerText = cart.reduce(function(s, i) { return s + i.price; }, 0);
+        const sum = cart.reduce((s, i) => s + i.price, 0);
+        document.getElementById('cartTotal').innerText = sum;
       } else {
         bar.style.display = 'none';
       }
@@ -572,20 +710,31 @@ function getStudentHubHTML() {
       document.getElementById('modalIbanBox').innerHTML =
         '<strong>Doğrudan FAST / Havale IBAN:</strong><br>' +
         '<code>' + activeRestaurant.iban + '</code><br>' +
-        '<small>' + activeRestaurant.accountName + '</small>';
-      document.getElementById('modal').style.display = 'flex';
+        '<small>' + esc(activeRestaurant.accountName) + '</small>';
+
+      // Render checkout item breakdown
+      document.getElementById('checkoutSummaryList').innerHTML = cart.map(i => {
+        const modText = i.selectedOptions.map(o => o.name + (o.price > 0 ? ' (+' + o.price + '₺)' : '')).join(', ');
+        const noteText = i.itemNote ? ' | Not: ' + esc(i.itemNote) : '';
+        return '<div class="cart-item-row">' +
+          '<div style="display:flex; justify-content:space-between;"><strong>' + esc(i.name) + '</strong><span>' + i.price + ' ₺</span></div>' +
+          '<div class="cart-item-mods">' + (modText || 'Standart') + noteText + '</div>' +
+        '</div>';
+      }).join('');
+
+      document.getElementById('checkoutModal').style.display = 'flex';
     }
-    function closeCheckout() { document.getElementById('modal').style.display = 'none'; }
+
+    function closeCheckout() { document.getElementById('checkoutModal').style.display = 'none'; }
 
     async function submitOrder() {
-      const note = document.getElementById('custName').value;
-      if (!note) return alert('Lütfen bilgilerinizi girin!');
+      const note = document.getElementById('custName').value.trim();
+      if (!note) return alert('Lütfen isim ve oda/telefon bilgilerinizi girin!');
       
       const payload = {
         restaurantId: activeRestaurant.id,
         restaurantName: activeRestaurant.name,
         items: cart,
-        total: cart.reduce(function(s, i) { return s + i.price; }, 0),
         customer: note,
         type: document.getElementById('orderType').value,
         payment: document.getElementById('paymentType').value
@@ -613,6 +762,26 @@ function getStudentHubHTML() {
       closeCheckout();
       renderActiveTicketUI();
     }
+
+    const stream = new EventSource('/api/stream');
+    stream.onmessage = function(e) {
+      const payload = JSON.parse(e.data);
+      if (payload.event === 'HUB_UPDATE') {
+        hubData = payload.data;
+        renderDirectory();
+        if (activeRestaurant) {
+          activeRestaurant = hubData[activeRestaurant.id];
+          openRestaurant(activeRestaurant.id);
+        }
+      } else if (payload.event === 'STATUS_CHANGE') {
+        if (activeTicket && payload.data.id === activeTicket.id) {
+          activeTicket.status = payload.data.status;
+          activeTicket.readyAt = payload.data.readyAt;
+          localStorage.setItem('activeTicket', JSON.stringify(activeTicket));
+          renderActiveTicketUI();
+        }
+      }
+    };
 
     function renderActiveTicketUI() {
       if (!activeTicket) return;
@@ -989,26 +1158,38 @@ function getKitchenHTML() {
     }
 
     function printReceipt(order) {
-  const p = document.getElementById('printContainer');
-  p.style.display = 'block';
-  p.innerHTML = 
-    '================================<br>' +
-    '       KAMPÜS MASASI FİŞİ       <br>' +
-    '================================<br>' +
-    'Sipariş No: #' + order.id + '<br>' +
-    'Tarih: ' + esc(order.date) + ' ' + esc(order.time) + '<br>' +
-    'Müşteri: ' + esc(order.customer) + '<br>' +
-    'Teslimat: ' + esc(order.type) + '<br>' +
-    'Ödeme: ' + esc(order.payment) + '<br>' +
-    '--------------------------------<br>' +
-    order.items.map(function(i) { return esc(i.name) + ' - ' + i.price + ' TL<br>'; }).join('') +
-    '--------------------------------<br>' +
-    'TOPLAM TUTAR: ' + order.total + ' TL<br>' +
-    '================================<br>' +
-    '  Afiyet Olsun! (0% Komisyon)   <br>';
-  window.print();
-  p.style.display = 'none';
-}
+      const p = document.getElementById('printContainer');
+      p.style.display = 'block';
+      
+      const itemsFormatted = order.items.map(function(i) {
+        let text = '<b>' + esc(i.name) + '</b> - ' + i.price + ' TL<br>';
+        if (i.selectedOptions && i.selectedOptions.length > 0) {
+          text += '&nbsp;&nbsp;[+] ' + i.selectedOptions.map(o => esc(o.name)).join(', ') + '<br>';
+        }
+        if (i.itemNote) {
+          text += '&nbsp;&nbsp;[NOT: ' + esc(i.itemNote) + ']<br>';
+        }
+        return text;
+      }).join('');
+
+      p.innerHTML = 
+        '================================<br>' +
+        '       KAMPÜS MASASI FİŞİ       <br>' +
+        '================================<br>' +
+        'Sipariş No: #' + order.id + '<br>' +
+        'Tarih: ' + esc(order.date) + ' ' + esc(order.time) + '<br>' +
+        'Müşteri: ' + esc(order.customer) + '<br>' +
+        'Teslimat: ' + esc(order.type) + '<br>' +
+        'Ödeme: ' + esc(order.payment) + '<br>' +
+        '--------------------------------<br>' +
+        itemsFormatted +
+        '--------------------------------<br>' +
+        'TOPLAM TUTAR: ' + order.total + ' TL<br>' +
+        '================================<br>' +
+        '  Afiyet Olsun! (0% Komisyon)   <br>';
+      window.print();
+      p.style.display = 'none';
+    }
 
     function updateCardUI(id, status) {
       const card = document.getElementById('order-' + id);

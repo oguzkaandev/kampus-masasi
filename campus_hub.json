@@ -14,14 +14,56 @@
         "name": "Tavuk Döner Dürüm",
         "price": 120,
         "desc": "Soslu, patatesli, turşulu",
-        "inStock": true
+        "inStock": true,
+        "options": [
+          {
+            "name": "Porsiyon Seçimi",
+            "type": "radio",
+            "required": true,
+            "choices": [
+              { "name": "Standart Dürüm", "price": 0 },
+              { "name": "1.5 Porsiyon (+50g Tavuk)", "price": 35 }
+            ]
+          },
+          {
+            "name": "Malzeme & Sos Tercihi",
+            "type": "checkbox",
+            "choices": [
+              { "name": "Soğansız", "price": 0 },
+              { "name": "Bol Soslu", "price": 0 },
+              { "name": "Turşusuz", "price": 0 },
+              { "name": "Ekstra Kaşar", "price": 25 },
+              { "name": "Ekstra Patates", "price": 15 }
+            ]
+          }
+        ]
       },
       {
         "id": 2,
         "name": "Et Döner Dürüm",
         "price": 190,
         "desc": "Özel tereyağlı lavaş",
-        "inStock": true
+        "inStock": true,
+        "options": [
+          {
+            "name": "Porsiyon Seçimi",
+            "type": "radio",
+            "required": true,
+            "choices": [
+              { "name": "Standart Dürüm", "price": 0 },
+              { "name": "1.5 Porsiyon (+50g Et)", "price": 60 }
+            ]
+          },
+          {
+            "name": "Malzeme Tercihi",
+            "type": "checkbox",
+            "choices": [
+              { "name": "Soğansız", "price": 0 },
+              { "name": "Ekstra Tereyağlı Lavaş", "price": 20 },
+              { "name": "Ekstra Kaşar", "price": 25 }
+            ]
+          }
+        ]
       },
       {
         "id": 3,
@@ -47,7 +89,19 @@
         "name": "Karışık Bazlama Tost",
         "price": 95,
         "desc": "Sucuk, kaşar, salça, tereyağı",
-        "inStock": true
+        "inStock": true,
+        "options": [
+          {
+            "name": "Sos & Malzeme",
+            "type": "checkbox",
+            "choices": [
+              { "name": "Salçasız", "price": 0 },
+              { "name": "Acı Soslu", "price": 0 },
+              { "name": "Ekstra Kaşar", "price": 20 },
+              { "name": "Ekstra Sucuk", "price": 25 }
+            ]
+          }
+        ]
       },
       {
         "id": 102,
@@ -80,7 +134,27 @@
         "name": "Tavuklu Nohutlu Pilav (1.5 Porsiyon)",
         "price": 110,
         "desc": "Bol didik tavuk ve tereyağlı pilav",
-        "inStock": true
+        "inStock": true,
+        "options": [
+          {
+            "name": "Porsiyon Seçimi",
+            "type": "radio",
+            "required": true,
+            "choices": [
+              { "name": "Standart Porsiyon", "price": 0 },
+              { "name": "Duble Tavuk (+50g)", "price": 35 }
+            ]
+          },
+          {
+            "name": "Tercihler",
+            "type": "checkbox",
+            "choices": [
+              { "name": "Karabibersiz", "price": 0 },
+              { "name": "Ekstra Nohut", "price": 10 },
+              { "name": "Ketçap & Mayonez İstiyorum", "price": 0 }
+            ]
+          }
+        ]
       },
       {
         "id": 202,
