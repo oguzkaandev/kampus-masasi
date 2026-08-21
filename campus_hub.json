@@ -6,7 +6,7 @@
     "pin": "1234",
     "status": "OPEN",
     "desc": "Hatay usulü özel soslu tavuk ve et dürüm",
-    "iban": "TR33 0006 1005 1987 6543 2100 01",
+    "iban": "TR710001500158007317481463",
     "accountName": "Ahmet Usta - Döner",
     "menu": [
       {
@@ -81,8 +81,8 @@
     "pin": "1234",
     "status": "OPEN",
     "desc": "Bol malzemeli çıtır bazlama ve sanayi tostları",
-    "iban": "TR55 0001 2009 8765 4321 0000 02",
-    "accountName": "Mehmet Abi - Tost",
+    "iban": "TR710001500158007317481463",
+    "accountName": "Tostçu Usta",
     "menu": [
       {
         "id": 101,
@@ -126,7 +126,7 @@
     "pin": "1234",
     "status": "OPEN",
     "desc": "Tereyağlı nohutlu tavuklu sokak pilavı",
-    "iban": "TR66 0003 4001 2345 6789 0000 03",
+    "iban": "TR710001500158007317481463",
     "accountName": "Ali Usta - Pilav",
     "menu": [
       {
