@@ -1109,11 +1109,11 @@ function getKitchenHTML() {
       <!-- Modifiers Quick Creator -->
       <div style="background:#0f172a; padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid #334155;">
         <label style="font-size:0.85rem; color:#93c5fd; font-weight:bold;">Porsiyon / Boyut Seçenekleri (Virgülle ayırın):</label>
-        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Standart:0, 1.5 Porsiyon:35)</p>
+        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Standart Dürüm:0, 1.5 Porsiyon:35)</p>
         <input type="text" id="editItemPortions" placeholder="Standart Dürüm:0, 1.5 Porsiyon:35">
 
         <label style="font-size:0.85rem; color:#93c5fd; font-weight:bold; margin-top:8px; display:block;">Ekstra Malzeme / Tercihler (Virgülle ayırın):</label>
-        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Soğansız:0, Ekstra Kaşar:25, Bol Soslu:0)</p>
+        <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Soğansız:0, Bol Soslu:0, Ekstra Kaşar:25)</p>
         <input type="text" id="editItemExtras" placeholder="Soğansız:0, Bol Soslu:0, Ekstra Kaşar:25">
       </div>
 
@@ -1305,7 +1305,6 @@ function getKitchenHTML() {
         document.getElementById('editItemPrice').value = item.price;
         document.getElementById('editItemDesc').value = item.desc || '';
         
-        // Populate options string
         let portionsStr = '';
         let extrasStr = '';
         if (item.options) {
@@ -1338,7 +1337,6 @@ function getKitchenHTML() {
 
       if (!name || isNaN(price)) return alert('Lütfen ürün adı ve geçerli bir fiyat girin!');
 
-      // Build options array
       const options = [];
       if (portionsRaw) {
         const choices = portionsRaw.split(',').map(s => {
@@ -1542,7 +1540,6 @@ function getKitchenHTML() {
 </body>
 </html>`;
 }
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Industrial Campus POS Engine v7 is running on port ${PORT}!`);
