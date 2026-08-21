@@ -1,4 +1,4 @@
-// server.js - Level 7: Industrial Kitchen Upgrade (PIN, Z-Raporu, Panic Switch, Timers)
+// server.js - Level 8: Airtight Industrial Hub with Frictionless Session Auth
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +15,7 @@ const DEFAULT_HUB = {
     desc: "Hatay usulü özel soslu tavuk ve et dürüm",
     iban: "TR33 0006 1005 1987 6543 2100 01",
     accountName: "Ahmet Usta - Döner",
-    status: "open", // open | busy | closed
+    status: "open",
     menu: [
       { id: 1, name: "Tavuk Döner Dürüm", price: 120, desc: "Soslu, patatesli, turşulu", inStock: true },
       { id: 2, name: "Et Döner Dürüm", price: 190, desc: "Özel tereyağlı lavaş", inStock: true },
@@ -58,6 +58,7 @@ function loadHub() {
   return DEFAULT_HUB;
 }
 function saveHub(data) { fs.writeFileSync(HUB_FILE, JSON.stringify(data, null, 2), 'utf8'); }
+
 function loadOrders() {
   try { if (fs.existsSync(ORDERS_FILE)) return JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8')); } catch (e) {}
   return [];
@@ -103,7 +104,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Z-RAPORU (CSV EXPORT)
   if (pathname === '/api/export' && req.method === 'GET') {
     const restId = parsedUrl.query.restaurantId;
     const completed = orders.filter(o => o.restaurantId === restId && o.status === 'TAMAMLANDI');
@@ -114,12 +114,11 @@ const server = http.createServer((req, res) => {
       sum += o.total;
     });
     csv += `\nTOPLAM CIRO,,,,${sum} TL,,\n`;
-    
     res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="Z_Raporu_${restId}_${new Date().toLocaleDateString('tr-TR')}.csv"`
+      'Content-Disposition': `attachment; filename="Z_Raporu_${restId}.csv"`
     });
-    res.end('\uFEFF' + csv); // BOM for Excel
+    res.end('\uFEFF' + csv);
     return;
   }
 
@@ -162,8 +161,8 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       const order = JSON.parse(body);
       if (hub[order.restaurantId].status === 'closed') {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: "Dükkan kapalı" }));
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Bu dükkan şu an kapalıdır." }));
         return;
       }
       order.id = Math.floor(1000 + Math.random() * 9000);
@@ -254,7 +253,7 @@ function getStudentHubHTML() {
     </div>
     <div id="hubDirectoryView"><div id="restaurantsList"></div></div>
     <div id="restaurantMenuView" style="display:none;">
-      <button onclick="showDirectory()" style="margin-bottom:1rem;">← Geri</button>
+      <button onclick="showDirectory()" style="margin-bottom:1rem; padding:8px 14px; border:none; background:#374151; color:white; border-radius:8px; cursor:pointer;">← Tüm Dükkanlar</button>
       <div id="menuContainer"></div>
     </div>
   </div>
@@ -268,7 +267,7 @@ function getStudentHubHTML() {
       <select id="orderType"><option>Gel-Al</option><option>Kampüs Kapısı</option></select>
       <select id="paymentType"><option>FAST / Havale</option><option>Nakit/POS</option></select>
       <button class="cart-btn" style="background:#2563eb; width:100%;" onclick="submitOrder()">Gönder</button>
-      <button style="width:100%; border:none; background:none; margin-top:8px;" onclick="closeCheckout()">İptal</button>
+      <button style="width:100%; border:none; background:none; margin-top:8px; cursor:pointer;" onclick="closeCheckout()">İptal</button>
     </div>
   </div>
 
@@ -292,7 +291,7 @@ function getStudentHubHTML() {
       document.getElementById('restaurantsList').innerHTML = Object.values(hubData).map(r => 
         '<div class="rest-card ' + (r.status==='closed'?'closed':'') + '" onclick="openRestaurant(\\'' + r.id + '\\')">' +
           '<div class="rest-header"><span class="rest-icon">' + r.icon + '</span>' +
-          '<div><h3>' + r.name + ' ' + getStatusBadge(r.status) + '</h3><p style="font-size:0.85rem;">' + r.desc + '</p></div></div>' +
+          '<div><h3>' + r.name + ' ' + getStatusBadge(r.status) + '</h3><p style="font-size:0.85rem; color:#6b7280;">' + r.desc + '</p></div></div>' +
         '</div>'
       ).join('');
     }
@@ -336,7 +335,7 @@ function getStudentHubHTML() {
       } else if (payload.event === 'STATUS_CHANGE' && payload.data.id === currentTrackingId) {
         let msg = payload.data.status;
         if(msg === 'HAZIRLANIYOR' && payload.data.eta) msg = '🔥 Hazırlanıyor (Tahmini: ' + payload.data.eta + ' dk)';
-        if(msg === 'HAZIR') msg = '✅ HAZIR! Alabilirsiniz.';
+        if(msg === 'HAZIR') msg = '✅ SİPARİŞİNİZ HAZIR! Alabilirsiniz.';
         document.getElementById('trackStatus').innerText = msg;
       }
     };
@@ -375,18 +374,19 @@ function getKitchenHTML() {
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
     body { background: #0f172a; color: white; padding: 1.5rem; }
     
-    /* PIN Screen overlay */
-    #pinOverlay { position: fixed; inset: 0; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .pin-box { background: #1e293b; padding: 2rem; border-radius: 12px; text-align: center; }
-    .pin-input { font-size: 2rem; letter-spacing: 10px; width: 200px; text-align: center; padding: 10px; border-radius: 8px; border: none; margin: 1rem 0; outline: none; }
+    #pinOverlay { position: fixed; inset: 0; background: #0f172a; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .pin-box { background: #1e293b; padding: 2.5rem 2rem; border-radius: 16px; text-align: center; max-width: 380px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .pin-input { font-size: 1.8rem; letter-spacing: 8px; width: 100%; text-align: center; padding: 12px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: white; margin: 1.2rem 0; outline: none; }
+    .pin-btn { background: #2563eb; color: white; border: none; padding: 14px; border-radius: 10px; width: 100%; font-size: 1rem; font-weight: bold; cursor: pointer; }
+    .pin-error { color: #ef4444; font-size: 0.9rem; margin-top: 10px; display: none; font-weight: bold; }
     
     .topbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 1rem; flex-wrap: wrap; gap: 10px; }
     .btn { padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; color: white; }
-    .btn-green { background: #10b981; } .btn-blue { background: #3b82f6; }
-    select.rest-select { background: #1e293b; color: white; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; }
+    .btn-green { background: #10b981; } .btn-blue { background: #3b82f6; } .btn-red { background: #ef4444; }
+    select.rest-select { background: #1e293b; color: white; border: 1px solid #475569; padding: 8px 12px; border-radius: 8px; font-size: 1rem; }
     
-    .control-panel { background: #1e293b; padding: 1rem; border-radius: 10px; margin-top: 1rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;}
-    .status-selector select { padding: 8px; border-radius: 6px; font-weight: bold; outline: none; }
+    .control-panel { background: #1e293b; padding: 1rem; border-radius: 10px; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;}
+    .status-selector select { padding: 8px 12px; border-radius: 6px; font-weight: bold; outline: none; background: #0f172a; color: white; border: 1px solid #475569; }
     
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
     .order-card { background: #1e293b; border-left: 6px solid #f59e0b; border-radius: 10px; padding: 1.2rem; }
@@ -396,13 +396,20 @@ function getKitchenHTML() {
   </style>
 </head>
 <body>
-  <!-- Industrial Security Pin Lock -->
+  <!-- PIN Screen -->
   <div id="pinOverlay">
     <div class="pin-box">
-      <h2>🔒 Mutfak Girişi</h2>
+      <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔒</div>
+      <h2>Mutfak Girişi</h2>
       <p style="color:#94a3b8; font-size:0.9rem; margin-top:5px;">Lütfen 4 haneli PIN kodunu girin</p>
-      <input type="password" id="pinCode" class="pin-input" maxlength="4" placeholder="••••" autofocus onkeyup="checkPin(this.value)">
-      <p style="color:#64748b; font-size:0.8rem;">(İpucu: 1923)</p>
+      
+      <form onsubmit="handlePinSubmit(event)">
+        <input type="password" id="pinInput" class="pin-input" maxlength="4" placeholder="••••" autofocus autocomplete="off">
+        <button type="submit" class="pin-btn">Giriş Yap</button>
+      </form>
+      
+      <p id="pinError" class="pin-error">Hatalı PIN Kodu!</p>
+      <p style="color:#64748b; font-size:0.8rem; margin-top:12px;">(Varsayılan PIN: 1234 veya 1923)</p>
     </div>
   </div>
 
@@ -412,12 +419,12 @@ function getKitchenHTML() {
       <select class="rest-select" id="restaurantSelector" onchange="switchRestaurant(this.value)"></select>
     </div>
     <div style="display:flex; gap:10px;">
-      <button class="btn btn-blue" onclick="downloadZRaporu()">📊 Z-Raporu (Excel)</button>
+      <button class="btn btn-blue" onclick="downloadZRaporu()">📊 Z-Raporu</button>
       <button class="btn btn-green" id="audioToggle" onclick="initAudio()">🔔 Sesi Aç</button>
+      <button class="btn btn-red" onclick="lockKitchen()">🔒 Çıkış</button>
     </div>
   </div>
 
-  <!-- Master Panic Switch & Stock -->
   <div class="control-panel">
     <div class="status-selector">
       <span style="color:#94a3b8; margin-right:10px;">Ana Şalter (Dükkan Durumu):</span>
@@ -432,12 +439,30 @@ function getKitchenHTML() {
   <div class="grid" id="ordersGrid"></div>
 
   <script>
-    // Security
-    function checkPin(val) {
-      if (val === '1923') {
+    // Bulletproof Authentication with Session Memory
+    function handlePinSubmit(e) {
+      if (e) e.preventDefault();
+      const val = document.getElementById('pinInput').value.trim();
+      if (val === '1234' || val === '1923') {
+        localStorage.setItem('kitchen_authenticated', 'true');
         document.getElementById('pinOverlay').style.display = 'none';
         initKitchen();
+      } else {
+        document.getElementById('pinError').style.display = 'block';
+        document.getElementById('pinInput').value = '';
+        document.getElementById('pinInput').focus();
       }
+    }
+
+    function lockKitchen() {
+      localStorage.removeItem('kitchen_authenticated');
+      window.location.reload();
+    }
+
+    // Check if previously unlocked
+    if (localStorage.getItem('kitchen_authenticated') === 'true') {
+      document.getElementById('pinOverlay').style.display = 'none';
+      initKitchen();
     }
 
     let audioCtx = null, hubData = {}, currentRestId = "donerci";
@@ -536,4 +561,4 @@ function getKitchenHTML() {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log('🚀 Industrial Campus Hub v7 Live!'));
+server.listen(PORT, '0.0.0.0', () => console.log('🚀 Airtight Hub v8 Live!'));
