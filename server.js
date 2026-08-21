@@ -15,7 +15,7 @@ const DEFAULT_HUB = {
     pin: "1234",
     status: "OPEN",
     desc: "Hatay usulü özel soslu tavuk ve et dürüm",
-    iban: "TR33 0006 1005 1987 6543 2100 01",
+    iban: "TR330006100519876543210001",
     accountName: "Ahmet Usta - Döner",
     menu: [
       {
@@ -84,7 +84,7 @@ const DEFAULT_HUB = {
     pin: "1234",
     status: "OPEN",
     desc: "Bol malzemeli çıtır bazlama ve sanayi tostları",
-    iban: "TR55 0001 2009 8765 4321 0000 02",
+    iban: "TR550001200987654321000002",
     accountName: "Mehmet Abi - Tost",
     menu: [
       {
@@ -117,7 +117,7 @@ const DEFAULT_HUB = {
     pin: "1234",
     status: "OPEN",
     desc: "Tereyağlı nohutlu tavuklu sokak pilavı",
-    iban: "TR66 0003 4001 2345 6789 0000 03",
+    iban: "TR660003400123456789000003",
     accountName: "Ali Usta - Pilav",
     menu: [
       {
@@ -237,8 +237,6 @@ const server = http.createServer((req, res) => {
       const pin = String(data.pin || '').trim();
       const rest = hub[restaurantId];
 
-      console.log(`[AUTH] Restaurant: ${restaurantId} | Sent: "${pin}" | Expected: "${rest ? rest.pin : 'NOT FOUND'}"`);
-
       if (rest && String(rest.pin).trim() === pin) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
@@ -319,9 +317,9 @@ const server = http.createServer((req, res) => {
     parseJsonBody(req, res, ({ restaurantId, itemId }) => {
       const rest = hub[restaurantId];
       if (rest) {
-        const item = rest.menu.find(i => i.id === itemId);
+        const item = rest.menu.find(i => String(i.id) === String(itemId));
         if (item) {
-          item.inStock = !item.inStock;
+          item.inStock = item.inStock === false ? true : false;
           saveHub(hub);
           broadcast({ event: 'HUB_UPDATE', data: hub });
         }
@@ -332,7 +330,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 9. API: Place Order
+  // 9. API: Place Order (With Robust Stock & ID Fallback)
   if (pathname === '/api/order' && req.method === 'POST') {
     parseJsonBody(req, res, (order) => {
       const rest = hub[order.restaurantId];
@@ -345,7 +343,8 @@ const server = http.createServer((req, res) => {
       let calculatedTotal = 0;
 
       for (const clientItem of (order.items || [])) {
-        const menuItem = rest.menu.find(m => m.id === clientItem.id && m.inStock);
+        // Robust ID lookup (matches both number and string IDs) & inStock !== false
+        const menuItem = rest.menu.find(m => String(m.id) === String(clientItem.id) && m.inStock !== false);
         if (!menuItem) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Stokta bulunmayan veya geçersiz ürün tespit edildi.' }));
@@ -358,7 +357,7 @@ const server = http.createServer((req, res) => {
           const clientSelected = clientItem.selectedOptions || [];
           for (const group of menuItem.options) {
             for (const choice of group.choices) {
-              const isSelected = clientSelected.some(cs => cs.group === group.name && cs.name === choice.name);
+              const isSelected = clientSelected.some(cs => cs.name === choice.name);
               if (isSelected) {
                 itemPrice += (choice.price || 0);
                 verifiedOptions.push({
@@ -452,15 +451,15 @@ const server = http.createServer((req, res) => {
       }
 
       item.price = parseFloat(item.price);
+      item.inStock = true; // Always ensure inStock is true when saved/created
 
       if (!item.id) {
         item.id = Date.now();
-        item.inStock = true;
         rest.menu.push(item);
       } else {
-        const idx = rest.menu.findIndex(m => m.id === item.id);
+        const idx = rest.menu.findIndex(m => String(m.id) === String(item.id));
         if (idx !== -1) {
-          rest.menu[idx] = { ...rest.menu[idx], ...item };
+          rest.menu[idx] = { ...rest.menu[idx], ...item, inStock: true };
         } else {
           rest.menu.push(item);
         }
@@ -479,7 +478,7 @@ const server = http.createServer((req, res) => {
     parseJsonBody(req, res, ({ restaurantId, itemId }) => {
       const rest = hub[restaurantId];
       if (rest) {
-        rest.menu = rest.menu.filter(m => m.id !== itemId);
+        rest.menu = rest.menu.filter(m => String(m.id) !== String(itemId));
         saveHub(hub);
         broadcast({ event: 'HUB_UPDATE', data: hub });
       }
@@ -495,7 +494,7 @@ const server = http.createServer((req, res) => {
       const rest = hub[restaurantId];
       if (rest) {
         if (desc !== undefined) rest.desc = desc;
-        if (iban !== undefined) rest.iban = iban;
+        if (iban !== undefined) rest.iban = iban.replace(/\s+/g, '').toUpperCase();
         if (accountName !== undefined) rest.accountName = accountName;
         saveHub(hub);
         broadcast({ event: 'HUB_UPDATE', data: hub });
@@ -538,7 +537,7 @@ function getStudentHubHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kampüs Masası</title>
-  <!-- Pure JS QR Code Library -->
+  <!-- Pure JS QR Code Generator -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -672,9 +671,9 @@ function getStudentHubHTML() {
       <!-- Dynamic TR-Karekod Container -->
       <div class="qr-container" id="qrContainer">
         <div class="qr-header">
-          <span>⚡ TR-Karekod (FAST Ödeme)</span>
+          <span>⚡ TR-Karekod (FAST Otomatik Ödeme)</span>
         </div>
-        <p style="font-size:0.75rem; color:#64748b;">Banka uygulamanızdan (Ziraat, Garanti, İşbank vb.) <strong>"Karekod ile Öde"</strong> seçip okutun:</p>
+        <p style="font-size:0.75rem; color:#64748b;">Banka uygulamanızdan <strong>"Karekod ile Öde"</strong> seçip okutun:</p>
         
         <div id="qrCodeBox"></div>
         
@@ -712,7 +711,19 @@ function getStudentHubHTML() {
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    /* --- TR-KAREKOD EMVCo GENERATOR --- */
+    // Convert Turkish characters to ASCII so bank QR parsers don't fail byte-length checks
+    function toAscii(str) {
+      if (!str) return 'ISYERI';
+      return str
+        .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+        .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+        .replace(/ş/g, 's').replace(/Ş/g, 'S')
+        .replace(/ı/g, 'i').replace(/İ/g, 'I')
+        .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+        .replace(/ç/g, 'c').replace(/Ç/g, 'C')
+        .toUpperCase();
+    }
+
     function formatTLV(tag, val) {
       const len = String(val.length).padStart(2, '0');
       return tag + len + val;
@@ -735,12 +746,12 @@ function getStudentHubHTML() {
 
     function generateTRKarekodPayload(iban, merchantName, amount, orderRef) {
       const cleanIban = String(iban || '').replace(/\\s+/g, '').toUpperCase();
-      const cleanName = String(merchantName || 'ISYERI').slice(0, 25);
+      const cleanName = toAscii(merchantName).slice(0, 25);
       const amountStr = Number(amount).toFixed(2);
       const ref = String(orderRef || 'KAMPUS').slice(0, 20);
 
-      // Tag 30: FAST Account Information (TCMB Standard)
-      const sub30_00 = formatTLV("00", "TR.GOV.TCMB.FAST");
+      // Tag 30: FAST Account Info (TCMB / BKM Standard)
+      const sub30_00 = formatTLV("00", "TR.BKM.FAST");
       const sub30_01 = formatTLV("01", cleanIban);
       const tag30 = formatTLV("30", sub30_00 + sub30_01);
 
@@ -749,18 +760,17 @@ function getStudentHubHTML() {
       const tag62 = formatTLV("62", sub62_05);
 
       let payload = "";
-      payload += formatTLV("00", "01");              // Payload Format Indicator
+      payload += formatTLV("00", "01");              // Payload Format
       payload += formatTLV("01", "12");              // Dynamic QR
-      payload += tag30;                              // FAST IBAN
-      payload += formatTLV("52", "5812");            // Merchant Category: Restaurant
-      payload += formatTLV("53", "949");             // Currency: TRY (949)
+      payload += tag30;                              // FAST Info
+      payload += formatTLV("52", "5812");            // Food/Restaurant Category
+      payload += formatTLV("53", "949");             // TRY
       payload += formatTLV("54", amountStr);         // Amount
-      payload += formatTLV("58", "TR");              // Country Code
-      payload += formatTLV("59", cleanName);         // Merchant Name
+      payload += formatTLV("58", "TR");              // Country
+      payload += formatTLV("59", cleanName);         // ASCII Name
       payload += formatTLV("60", "KAMPUS");          // City
       payload += tag62;                              // Reference Info
 
-      // Tag 63: CRC16
       payload += "6304";
       const crc = calculateCRC16(payload);
       return payload + crc;
@@ -830,15 +840,16 @@ function getStudentHubHTML() {
       const cont = document.getElementById('menuContainer');
       
       cont.innerHTML = activeRestaurant.menu.map(function(item) {
-        const canAdd = item.inStock && !isClosed;
+        // Item is available if inStock is not explicitly false
+        const canAdd = (item.inStock !== false) && !isClosed;
         const stockClass = canAdd ? '' : 'out-of-stock';
-        let btn = '<button class="add" onclick="handleItemClick(' + item.id + ')">+ Ekle</button>';
+        let btn = '<button class="add" onclick="handleItemClick(\\'' + item.id + '\\')">+ Ekle</button>';
         
-        if (!item.inStock) btn = '<button class="add disabled" disabled>Tükendi</button>';
+        if (item.inStock === false) btn = '<button class="add disabled" disabled>Tükendi</button>';
         if (isClosed) btn = '<button class="add disabled" disabled>Kapalı</button>';
 
         return '<div class="card ' + stockClass + '">' +
-          '<div><h3>' + esc(item.name) + (!item.inStock ? ' <span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>' : '') + '</h3>' +
+          '<div><h3>' + esc(item.name) + (item.inStock === false ? ' <span style="color:#ef4444; font-size:0.8rem;">(Tükendi)</span>' : '') + '</h3>' +
           '<p style="color:#64748b; font-size:0.85rem;">' + esc(item.desc) + '</p>' +
           '<div class="price">' + item.price + ' ₺</div></div>' +
           btn + '</div>';
@@ -846,7 +857,7 @@ function getStudentHubHTML() {
     }
 
     function handleItemClick(itemId) {
-      const item = activeRestaurant.menu.find(i => i.id === itemId);
+      const item = activeRestaurant.menu.find(i => String(i.id) === String(itemId));
       if (!item) return;
 
       if (item.options && item.options.length > 0) {
@@ -950,7 +961,6 @@ function getStudentHubHTML() {
 
       const totalAmount = cart.reduce((s, i) => s + i.price, 0);
 
-      // Render checkout item breakdown
       document.getElementById('checkoutSummaryList').innerHTML = cart.map(i => {
         const modText = i.selectedOptions.map(o => o.name + (o.price > 0 ? ' (+' + o.price + '₺)' : '')).join(', ');
         const noteText = i.itemNote ? ' | Not: ' + esc(i.itemNote) : '';
@@ -1181,7 +1191,6 @@ function getKitchenHTML() {
     .auth-box { background: #1e293b; padding: 2rem; border-radius: 14px; text-align: center; max-width: 320px; width: 100%; border: 1px solid #334155; }
     .pin-input { font-size: 2rem; letter-spacing: 12px; text-align: center; width: 160px; padding: 8px; margin: 16px auto; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; display: block; }
     
-    /* 80mm Receipt Print Styling */
     @media print {
       body * { visibility: hidden; }
       .print-area, .print-area * { visibility: visible; }
@@ -1190,7 +1199,6 @@ function getKitchenHTML() {
   </style>
 </head>
 <body>
-  <!-- PIN Security Gate -->
   <div id="authModal">
     <div class="auth-box">
       <h2>🔒 Mutfak Girişi</h2>
@@ -1220,7 +1228,6 @@ function getKitchenHTML() {
     </div>
   </div>
 
-  <!-- Live Stats -->
   <div class="stats-bar">
     <div class="stat-card revenue">
       <span class="stat-label">💰 Toplam Ciro</span>
@@ -1244,7 +1251,6 @@ function getKitchenHTML() {
 
   <div class="grid" id="ordersGrid"></div>
 
-  <!-- Hidden Print Container -->
   <div id="printContainer" class="print-area" style="display:none;"></div>
 
   <!-- Modal 1: Menu & Store Management -->
@@ -1255,19 +1261,17 @@ function getKitchenHTML() {
         <button onclick="closeModal('menuModal')" style="background:none; border:none; color:#94a3b8; font-size:1.5rem; cursor:pointer;">&times;</button>
       </div>
 
-      <!-- Quick Store Settings Tab -->
       <div style="background:#0f172a; padding:12px; border-radius:8px; margin-bottom:1rem; border:1px solid #334155;">
         <h4 style="color:#f59e0b; margin-bottom:6px;">🏦 Dükkan & FAST/IBAN Bilgisi</h4>
         <label style="font-size:0.8rem; color:#94a3b8;">Hesap Sahibi:</label>
         <input type="text" id="storeAccountName" placeholder="Örn: Ahmet Usta - Döner">
-        <label style="font-size:0.8rem; color:#94a3b8;">IBAN:</label>
+        <label style="font-size:0.8rem; color:#94a3b8;">IBAN (26 Haneli Gerçek TR IBAN):</label>
         <input type="text" id="storeIban" placeholder="TR00 0000...">
         <label style="font-size:0.8rem; color:#94a3b8;">Dükkan Açıklaması:</label>
         <input type="text" id="storeDesc" placeholder="Örn: Hatay usulü lavaş...">
         <button class="btn-action" style="background:#2563eb; padding:8px;" onclick="saveStoreSettings()">Kaydet (Dükkan Bilgileri)</button>
       </div>
 
-      <!-- Item List Section -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h4>🍲 Menüdeki Ürünler:</h4>
         <button class="btn-action" style="width:auto; padding:6px 12px; font-size:0.85rem;" onclick="openItemEditor(null)">➕ Yeni Ürün Ekle</button>
@@ -1291,7 +1295,6 @@ function getKitchenHTML() {
       <label style="font-size:0.85rem; color:#94a3b8;">Açıklama:</label>
       <input type="text" id="editItemDesc" placeholder="Örn: Soslu, patatesli, turşulu">
 
-      <!-- Modifiers Quick Creator -->
       <div style="background:#0f172a; padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid #334155;">
         <label style="font-size:0.85rem; color:#93c5fd; font-weight:bold;">Porsiyon / Boyut Seçenekleri (Virgülle ayırın):</label>
         <p style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">Format: İsim:Fiyat (Örn: Standart Dürüm:0, 1.5 Porsiyon:35)</p>
@@ -1408,11 +1411,12 @@ function getKitchenHTML() {
       if (rest) {
         updateStoreStatusUI(rest.status || 'OPEN');
         document.getElementById('stockContainer').innerHTML = rest.menu.map(function(item) {
-          const btnClass = item.inStock ? 'in-stock' : 'out-stock';
-          const label = item.inStock ? '🟢 Stokta' : '🔴 Tükendi';
+          const isItemInStock = item.inStock !== false;
+          const btnClass = isItemInStock ? 'in-stock' : 'out-stock';
+          const label = isItemInStock ? '🟢 Stokta' : '🔴 Tükendi';
           return '<div class="stock-item">' +
             '<span>' + esc(item.name) + '</span>' +
-            '<button class="stock-toggle ' + btnClass + '" onclick="toggleStock(' + item.id + ')">' + label + '</button>' +
+            '<button class="stock-toggle ' + btnClass + '" onclick="toggleStock(\\'' + item.id + '\\')">' + label + '</button>' +
           '</div>';
         }).join('');
       }
@@ -1447,7 +1451,7 @@ function getKitchenHTML() {
       loadRestaurantDashboard();
     }
 
-    /* --- MENU & PRICE EDITOR LOGIC --- */
+    /* --- MENU & PRICE EDITOR --- */
     function openMenuModal() {
       const rest = hubData[currentRestId];
       if (!rest) return;
@@ -1473,8 +1477,8 @@ function getKitchenHTML() {
             '<p style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">' + esc(item.desc || '') + '</p>' +
           '</div>' +
           '<div>' +
-            '<button class="btn-edit" onclick="openItemEditor(' + item.id + ')">✏️ Düzenle</button>' +
-            '<button class="btn-del" onclick="deleteMenuItem(' + item.id + ')">🗑️ Sil</button>' +
+            '<button class="btn-edit" onclick="openItemEditor(\\'' + item.id + '\\')">✏️ Düzenle</button>' +
+            '<button class="btn-del" onclick="deleteMenuItem(\\'' + item.id + '\\')">🗑️ Sil</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -1483,7 +1487,7 @@ function getKitchenHTML() {
     function openItemEditor(itemId) {
       const rest = hubData[currentRestId];
       if (itemId) {
-        const item = rest.menu.find(m => m.id === itemId);
+        const item = rest.menu.find(m => String(m.id) === String(itemId));
         document.getElementById('itemFormTitle').innerText = 'Ürünü Düzenle: ' + item.name;
         document.getElementById('editItemId').value = item.id;
         document.getElementById('editItemName').value = item.name;
@@ -1543,10 +1547,11 @@ function getKitchenHTML() {
       }
 
       const itemPayload = {
-        id: id ? parseInt(id) || id : undefined,
+        id: id ? id : undefined,
         name: name,
         price: price,
         desc: desc,
+        inStock: true,
         options: options
       };
 
